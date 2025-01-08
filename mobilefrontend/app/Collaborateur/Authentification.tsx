@@ -65,6 +65,17 @@ const Authentication = () => {
         )}
       </View>
 
+      {/* Move the clickable login icon below the input fields */}
+      <TouchableOpacity 
+        style={styles.iconContainer}
+        onPress={() => setAction(action === "Login" ? "Sign up" : "Login")}
+      >
+        <Image 
+          source={require('../../assets/images/login.png')} // Your login icon path here
+          style={styles.icon} 
+        />
+      </TouchableOpacity>
+
       {action === "Login" && (
         <TouchableOpacity style={styles.forgotPassword}>
           <Text>Forgot password? <Text style={styles.forgotLink}>Click here!</Text></Text>
@@ -186,10 +197,12 @@ const styles = StyleSheet.create({
   activeText: {
     color: '#fff', // text color for active button
   },
-  gray: {
-    backgroundColor: '#eaeaea',
-    color: '#676767',
-    cursor: 'not-allowed',
+  iconContainer: {
+    marginTop: 20, // Adjust the spacing below the input fields
+  },
+  icon: {
+    width: 50,
+    height: 50,
   },
 });
 
