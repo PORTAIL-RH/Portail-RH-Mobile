@@ -1,12 +1,14 @@
 import React, { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { createNativeStackNavigator } from '@react-navigation/native-stack'; // Corrected import
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import Authentification from './Collaborateur/Authentification';
 import AcceuilCollaborateur from './Collaborateur/AcceuilCollaborateur';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import Profile from './Collaborateur/Profile';
+
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -48,6 +50,12 @@ export default function RootLayout() {
           component={AcceuilCollaborateur}
           options={{ title: 'AcceuilCollaborateur' }}
         />
+        <Stack.Screen
+    name="Profile"
+    component={Profile}
+    options={{ title: 'Profile' }}
+/>
+
       </Stack.Navigator>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
