@@ -2,7 +2,7 @@ package com.example.PortailRH.Controller;
 
 import com.example.PortailRH.Model.Collaborateur;
 import com.example.PortailRH.Repository.CollaborateurRepository;
-import com.example.PortailRH.Util.Util.JwtUtil;
+import com.example.PortailRH.Util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -11,6 +11,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+
 @RequestMapping("/api/Collaborateur")
 public class CollaborateurController {
 
