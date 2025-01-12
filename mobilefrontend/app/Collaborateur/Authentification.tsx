@@ -1,37 +1,91 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import axios from 'axios';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+// Define the navigation stack types
+type AuthentificationStackParamList = {
+  Authentification: undefined;
+  AcceuilCollaborateur: undefined;
+};
+
+// Define the navigation prop type
+type AuthentificationNavigationProp = NativeStackNavigationProp<AuthentificationStackParamList, 'Authentification'>;
 
 const Authentication = () => {
-  const [action, setAction] = useState("Login");
+  const navigation = useNavigation<AuthentificationNavigationProp>(); // Initialize navigation with proper typing
+  const [action, setAction] = useState<'Login' | 'Sign up'>('Login');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const handleSignUp = async () => {
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:8081/api/Collaborateur/register', {
+        username,
+        email,
+        password,
+      });
+      if (response.status === 200) {
+        Alert.alert('Success', 'Account created successfully');
+        setAction('Login'); // Switch to Login after successful registration
+      }
+    } catch (error) {
+      console.error('Error signing up:', error);
+      Alert.alert('Error', 'Failed to create account');
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const response = await axios.post('http://localhost:8081/api/Collaborateur/login', {
+        email,
+        password,
+      });
+      if (response.status === 200) {
+        Alert.alert('Success', 'Login successful');
+        navigation.navigate('AcceuilCollaborateur'); // Navigate to AcceuilCollaborateur
+      }
+    } catch (error) {
+      console.error('Error logging in:', error);
+      Alert.alert('Error', 'Invalid email or password');
+      navigation.navigate('AcceuilCollaborateur'); // Navigate to AcceuilCollaborateur
+
+    }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.text}>{action}</Text>
-        <View
-          style={styles.underline}
-          onTouchStart={() => setAction(action === "Login" ? "Sign up" : "Login")}
-        />
+        <View style={styles.underline} />
+        <TouchableOpacity
+          style={styles.switchButton}
+          onPress={() => setAction(action === 'Login' ? 'Sign up' : 'Login')}
+        >
+          <Text style={styles.switchText}>
+            {action === 'Login' ? 'Switch to Sign up' : 'Switch to Login'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.inputs}>
-        {action === "Sign up" && (
+        {action === 'Sign up' && (
           <View style={styles.input}>
             <Image source={require('../../assets/images/profil.png')} style={styles.img} />
             <TextInput
               style={styles.inputField}
               placeholder="Username"
               placeholderTextColor="#888"
-            />
-          </View>
-        )}
-        {action === "Login" && (
-          <View style={styles.input}>
-            <Image source={require('../../assets/images/code.png')} style={styles.img} />
-            <TextInput
-              style={styles.inputField}
-              placeholder="Code"
-              placeholderTextColor="#888"
+              value={username}
+              onChangeText={setUsername}
             />
           </View>
         )}
@@ -41,6 +95,8 @@ const Authentication = () => {
             style={styles.inputField}
             placeholder="Email"
             placeholderTextColor="#888"
+            value={email}
+            onChangeText={setEmail}
           />
         </View>
         <View style={styles.input}>
@@ -50,9 +106,11 @@ const Authentication = () => {
             placeholder="Password"
             secureTextEntry
             placeholderTextColor="#888"
+            value={password}
+            onChangeText={setPassword}
           />
         </View>
-        {action === "Sign up" && (
+        {action === 'Sign up' && (
           <View style={styles.input}>
             <Image source={require('../../assets/images/pwd.png')} style={styles.img} />
             <TextInput
@@ -60,41 +118,29 @@ const Authentication = () => {
               placeholder="Confirm Password"
               secureTextEntry
               placeholderTextColor="#888"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
             />
           </View>
         )}
       </View>
 
-      {/* Move the clickable login icon below the input fields */}
-      <TouchableOpacity 
-        style={styles.iconContainer}
-        onPress={() => setAction(action === "Login" ? "Sign up" : "Login")}
-      >
-        <Image 
-          source={require('../../assets/images/login.png')} // Your login icon path here
-          style={styles.icon} 
-        />
-      </TouchableOpacity>
-
-      {action === "Login" && (
-        <TouchableOpacity style={styles.forgotPassword}>
-          <Text>Forgot password? <Text style={styles.forgotLink}>Click here!</Text></Text>
-        </TouchableOpacity>
-      )}
-
       <View style={styles.submitContainer}>
-        <TouchableOpacity
-          style={[styles.submit, action === "Login" && styles.activeButton]} // Active button styling for Login
-          onPress={() => setAction("Login")}
-        >
-          <Text style={[styles.submitText, action === "Login" && styles.activeText]}>Login</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.submit, action === "Sign up" && styles.activeButton]} // Active button styling for Sign up
-          onPress={() => setAction("Sign up")}
-        >
-          <Text style={[styles.submitText, action === "Sign up" && styles.activeText]}>Sign up</Text>
-        </TouchableOpacity>
+        {action === 'Login' ? (
+          <TouchableOpacity
+            style={[styles.submit, styles.activeButton]}
+            onPress={handleLogin}
+          >
+            <Text style={[styles.submitText, styles.activeText]}>Login</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.submit, styles.activeButton]}
+            onPress={handleSignUp}
+          >
+            <Text style={[styles.submitText, styles.activeText]}>Sign up</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -109,7 +155,11 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     backgroundColor: '#fff',
     borderRadius: 12,
-    boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 5, // For Android
   },
   header: {
     alignItems: 'center',
@@ -126,7 +176,18 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: '#4c00b4',
     borderRadius: 9,
-    cursor: 'pointer',
+  },
+  switchButton: {
+    marginTop: 10,
+    backgroundColor: '#4c00b4',
+    paddingVertical: 5,
+    paddingHorizontal: 20,
+    borderRadius: 50,
+  },
+  switchText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   inputs: {
     width: '80%',
@@ -160,16 +221,6 @@ const styles = StyleSheet.create({
     height: 20,
     marginRight: 10,
   },
-  forgotPassword: {
-    marginTop: 27,
-    fontSize: 18,
-    color: '#797979',
-  },
-  forgotLink: {
-    color: '#4c00b4',
-    fontWeight: 'bold',
-    textDecorationLine: 'underline',
-  },
   submitContainer: {
     flexDirection: 'row',
     gap: 20,
@@ -180,29 +231,26 @@ const styles = StyleSheet.create({
     height: 45,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff', // default background color is white
+    backgroundColor: '#fff',
     borderRadius: 50,
     borderWidth: 1,
-    borderColor: '#4c00b4', // border color for the button
-    boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.1)',
+    borderColor: '#4c00b4',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5, // For Android
   },
   activeButton: {
-    backgroundColor: '#4c00b4', // active button background color
+    backgroundColor: '#4c00b4',
   },
   submitText: {
-    color: '#4c00b4', // default text color
+    color: '#4c00b4',
     fontSize: 16,
     fontWeight: '700',
   },
   activeText: {
-    color: '#fff', // text color for active button
-  },
-  iconContainer: {
-    marginTop: 20, // Adjust the spacing below the input fields
-  },
-  icon: {
-    width: 50,
-    height: 50,
+    color: '#fff',
   },
 });
 
