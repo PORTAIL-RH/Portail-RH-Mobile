@@ -102,7 +102,10 @@ const AcceuilCollaborateur = () => {
         {/* Add Request Section */}
         <View style={styles.addRequestContainer}>
           <Text style={styles.addRequestText}>Ajouter une nouvelle demande</Text>
-          <TouchableOpacity style={styles.addRequestButton}>
+          <TouchableOpacity
+            style={styles.addRequestButton}
+            onPress={() => navigation.navigate('Demande')}
+          >
             <Text style={styles.addRequestButtonText}>+ Ajouter</Text>
           </TouchableOpacity>
         </View>
@@ -119,8 +122,8 @@ const AcceuilCollaborateur = () => {
           <Text style={styles.navText}>Calendar</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
-          <Image source={require('../../assets/images/chat.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Messages</Text>
+          <Image source={require('../../assets/images/cloche.png')} style={styles.navIcon} />
+          <Text style={styles.navText}>Notifications</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.navItem}>
           <Image source={require('../../assets/images/profile.png')} style={styles.navIcon} />
@@ -130,6 +133,8 @@ const AcceuilCollaborateur = () => {
     </View>
   );
 };
+
+
 
 const lightStyles = {
   container: {

@@ -8,6 +8,7 @@ import Authentification from './Collaborateur/Authentification';
 import AcceuilCollaborateur from './Collaborateur/AcceuilCollaborateur';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import Profile from './Collaborateur/Profile';
+import Demande from './Collaborateur/Demande';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -51,10 +52,15 @@ export default function RootLayout() {
           options={{ title: 'AcceuilCollaborateur' }}
         />
         <Stack.Screen
-    name="Profile"
-    component={Profile}
-    options={{ title: 'Profile' }}
-/>
+        name="Profile"
+        component={Profile}
+        options={{ title: 'Profile' }}
+        />
+        <Stack.Screen 
+        name="Demande" 
+        component={Demande} 
+        options={{ title: 'Demande' }}
+        />
 
       </Stack.Navigator>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
