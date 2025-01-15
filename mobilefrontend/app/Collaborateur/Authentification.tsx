@@ -18,6 +18,7 @@ const Authentication = () => {
   const [action, setAction] = useState<'Login' | 'Sign up'>('Login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [matricule, setmatricule] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -28,8 +29,9 @@ const Authentication = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:8081/api/Collaborateur/register', {
+      const response = await axios.post('http://localhost:8080/api/Personnel/register', {
         username,
+        matricule,
         email,
         password,
       });
@@ -45,8 +47,8 @@ const Authentication = () => {
 
   const handleLogin = async () => {
     try {
-      const response = await axios.post('http://localhost:8081/api/Collaborateur/login', {
-        email,
+      const response = await axios.post('http://localhost:8080/api/Personnel/login', {
+        matricule,
         password,
       });
       if (response.status === 200) {
@@ -90,6 +92,17 @@ const Authentication = () => {
           </View>
         )}
         <View style={styles.input}>
+          <Image source={require('../../assets/images/code.png')} style={styles.img} />
+          <TextInput
+            style={styles.inputField}
+            placeholder="Matricule"
+            placeholderTextColor="#888"
+            value={matricule}
+            onChangeText={setmatricule}
+          />
+        </View>
+        {action === 'Sign up' && (
+        <View style={styles.input}>
           <Image source={require('../../assets/images/mail.png')} style={styles.img} />
           <TextInput
             style={styles.inputField}
@@ -99,6 +112,7 @@ const Authentication = () => {
             onChangeText={setEmail}
           />
         </View>
+        )}
         <View style={styles.input}>
           <Image source={require('../../assets/images/pwd.png')} style={styles.img} />
           <TextInput
