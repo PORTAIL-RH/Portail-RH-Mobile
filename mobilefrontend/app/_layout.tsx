@@ -9,6 +9,11 @@ import AcceuilCollaborateur from './Collaborateur/AcceuilCollaborateur';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import Profile from './Collaborateur/Profile';
 import Demande from './Collaborateur/Demande';
+import Calendar from './Collaborateur/Calendar';
+import Autorisation from './Collaborateur/Demande/Autorisation';
+import Conge from './Collaborateur/Demande/Conge';
+import Formation from './Collaborateur/Demande/Formation';
+import SidebarLayout from './Collaborateur/Demande/SidebarLayout';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -61,6 +66,32 @@ export default function RootLayout() {
         component={Demande} 
         options={{ title: 'Demande' }}
         />
+        <Stack.Screen 
+        name="Calendar" 
+        component={Calendar} 
+        options={{ title: 'Calendar' }}
+        />
+        <Stack.Screen 
+        name="Autorisation" 
+        component={Autorisation} 
+        options={{ title: 'Autorisation' }}
+        />
+        <Stack.Screen 
+        name="Conge" 
+        component={Conge} 
+        options={{ title: 'Conge' }}
+        />
+        <Stack.Screen 
+        name="Formation" 
+        component={Formation} 
+        options={{ title: 'Formation' }}
+        />
+        <Stack.Screen 
+        name="SidebarLayout" 
+        component={SidebarLayout} 
+        options={{ title: 'SidebarLayout' }}
+        />
+        
 
       </Stack.Navigator>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
