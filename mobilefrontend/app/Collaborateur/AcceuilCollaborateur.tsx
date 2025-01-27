@@ -104,7 +104,7 @@ const AcceuilCollaborateur = () => {
           <Text style={styles.addRequestText}>Ajouter une nouvelle demande</Text>
           <TouchableOpacity
             style={styles.addRequestButton}
-            onPress={() => navigation.navigate('Demande')}
+            onPress={() => navigation.navigate('Autorisation')}
           >
             <Text style={styles.addRequestButtonText}>+ Ajouter</Text>
           </TouchableOpacity>
@@ -117,7 +117,7 @@ const AcceuilCollaborateur = () => {
           <Image source={require('../../assets/images/home.png')} style={styles.navIcon} />
           <Text style={styles.navTextActive}>Home</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity onPress={() => navigation.navigate('Calendar')} style={styles.navItem}>
           <Image source={require('../../assets/images/calendar.png')} style={styles.navIcon} />
           <Text style={styles.navText}>Calendar</Text>
         </TouchableOpacity>
