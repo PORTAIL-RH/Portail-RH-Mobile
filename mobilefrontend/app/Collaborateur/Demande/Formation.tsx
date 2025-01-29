@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, Picker, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import SidebarLayout from './SidebarLayout'; // Assurez-vous d'avoir ce composant
 import Icon from 'react-native-vector-icons/MaterialIcons'; // Import icon library
+import { Picker } from '@react-native-picker/picker';
 
 const Formation = () => {
   const [selectedType, setSelectedType] = useState('');
@@ -105,7 +106,8 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    marginBottom: 10,
+    marginBottom: 12,
+    fontWeight: 'bold',
   },
   button: {
     marginTop: 20,
@@ -127,7 +129,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',  // Aligner l'icône et le texte horizontalement
     alignItems: 'center',  // Centrer verticalement
-    marginBottom: 20,      // Espacer du reste du contenu
+    marginBottom: 30,      // Espacer du reste du contenu
   },
 });
 
