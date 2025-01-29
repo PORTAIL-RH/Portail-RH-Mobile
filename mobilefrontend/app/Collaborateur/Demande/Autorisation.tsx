@@ -5,10 +5,12 @@ import {
   TextInput,
   StyleSheet,
   View,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import SidebarLayout from './SidebarLayout';
 import Icon from 'react-native-vector-icons/MaterialIcons'; // Import icon library
+import * as DocumentPicker from 'expo-document-picker';
 
 const Autorisation = () => {
   const [dateDebut, setDateDebut] = useState(new Date());
@@ -18,6 +20,20 @@ const Autorisation = () => {
   const [showPickerDebut, setShowPickerDebut] = useState(false);
   const [showPickerSortie, setShowPickerSortie] = useState(false);
   const [showPickerRetour, setShowPickerRetour] = useState(false);
+  const [file, setFile] = useState(null); // Store file object
+
+
+    const handleFileUpload = async () => {
+      try {
+        const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
+        if (res.type === 'success') {
+          setFile(res); // Save the file object
+        }
+      } catch (err) {
+        console.error('Error picking file:', err);
+        Alert.alert('Erreur', 'Une erreur est survenue lors de la sélection du fichier.');
+      }
+    };
 
   // Handle date selection for Date de début
   const onChangeDebut = (event, selectedDate) => {
@@ -123,6 +139,12 @@ const Autorisation = () => {
         />
       </View>
 
+        <Text style={styles.label}>Pièce jointe</Text>
+        <TouchableOpacity style={styles.inputContainer} onPress={handleFileUpload}>
+          <Icon name="attach-file" size={20} color="#999" />
+          <Text style={styles.input}>{file ? file.name : 'Choisir un fichier'}</Text>
+        </TouchableOpacity>
+
       <TouchableOpacity style={styles.button} onPress={handleSubmit}>
         <Icon name="send" size={20} color="#fff" style={styles.buttonIcon} />
         <Text style={styles.buttonText}>Soumettre</Text>
@@ -184,3 +206,7 @@ const styles = StyleSheet.create({
 });
 
 export default Autorisation;
+function setFile(res: DocumentPicker.DocumentPickerResult) {
+  throw new Error('Function not implemented.');
+}
+
