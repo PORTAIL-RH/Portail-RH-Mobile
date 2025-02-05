@@ -3,38 +3,46 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } fro
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define the navigation stack types
 type AuthentificationStackParamList = {
   Authentification: undefined;
   AcceuilCollaborateur: undefined;
+  AdminDashboard: undefined;
 };
 
 // Define the navigation prop type
 type AuthentificationNavigationProp = NativeStackNavigationProp<AuthentificationStackParamList, 'Authentification'>;
 
 const Authentication = () => {
-  const navigation = useNavigation<AuthentificationNavigationProp>(); // Initialize navigation with proper typing
+  const navigation = useNavigation<AuthentificationNavigationProp>();
   const [action, setAction] = useState<'Login' | 'Sign up'>('Login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [matricule, setmatricule] = useState('');
+  const [matricule, setMatricule] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
   const handleSignUp = async () => {
+    if (!username || !matricule || !email || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+  
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
-
+  
     try {
       const response = await axios.post('http://localhost:8080/api/Personnel/register', {
-        username,
+        nom: username,
         matricule,
         email,
-        password,
+        motDePasse: password,
+        confirmationMotDePasse: confirmPassword,
       });
+  
       if (response.status === 200) {
         Alert.alert('Success', 'Account created successfully');
         setAction('Login'); // Switch to Login after successful registration
@@ -44,24 +52,42 @@ const Authentication = () => {
       Alert.alert('Error', 'Failed to create account');
     }
   };
+  
+  const getUserData = async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    const userInfo = await AsyncStorage.getItem('userInfo');
+    if (userInfo) {
+      console.log('User Info:', JSON.parse(userInfo));
+    }
+  };
+  
 
   const handleLogin = async () => {
     try {
       const response = await axios.post('http://localhost:8080/api/Personnel/login', {
-        matricule,
-        password,
+        matricule, // Ensure this matches the backend's expected field name
+        motDePasse: password, // Ensure this matches the backend's expected field name
       });
       if (response.status === 200) {
-        Alert.alert('Success', 'Login successful');
-        navigation.navigate('AcceuilCollaborateur'); // Navigate to AcceuilCollaborateur
+        const { token, id, role } = response.data;
+        await AsyncStorage.setItem('userToken', token);
+        await AsyncStorage.setItem('userInfo', JSON.stringify(response.data));
+  
+        if (role === 'admin') {
+          navigation.navigate('AdminDashboard');
+        } else {
+          navigation.navigate('AdminDashboard');
+        }
       }
     } catch (error) {
       console.error('Error logging in:', error);
-      Alert.alert('Error', 'Invalid email or password');
-      navigation.navigate('AcceuilCollaborateur'); // Navigate to AcceuilCollaborateur
+      Alert.alert('Error', 'Invalid matricule or password');
+      navigation.navigate('AdminDashboard');
 
     }
   };
+  
+  
 
   return (
     <View style={styles.container}>
@@ -98,20 +124,20 @@ const Authentication = () => {
             placeholder="Matricule"
             placeholderTextColor="#888"
             value={matricule}
-            onChangeText={setmatricule}
+            onChangeText={setMatricule}
           />
         </View>
         {action === 'Sign up' && (
-        <View style={styles.input}>
-          <Image source={require('../../assets/images/mail.png')} style={styles.img} />
-          <TextInput
-            style={styles.inputField}
-            placeholder="Email"
-            placeholderTextColor="#888"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
+          <View style={styles.input}>
+            <Image source={require('../../assets/images/mail.png')} style={styles.img} />
+            <TextInput
+              style={styles.inputField}
+              placeholder="Email"
+              placeholderTextColor="#888"
+              value={email}
+              onChangeText={setEmail}
+            />
+          </View>
         )}
         <View style={styles.input}>
           <Image source={require('../../assets/images/pwd.png')} style={styles.img} />

@@ -14,12 +14,13 @@ import Autorisation from './Collaborateur/Demande/Autorisation';
 import Conge from './Collaborateur/Demande/Conge';
 import Formation from './Collaborateur/Demande/Formation';
 import SidebarLayout from './Collaborateur/Demande/SidebarLayout';
-
-
+import AdminDashboard from './Admin/AdminDashboard';
+import AdminSideBar from './Admin/AdminSideBar';
+import Notifications from './Admin/Notifications';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-const Stack = createNativeStackNavigator(); // Use the correct Native Stack Navigator
+const Stack = createNativeStackNavigator(); 
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -42,7 +43,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack.Navigator
         screenOptions={{
-          headerShown: false,
+        headerShown: false,
         }}
       >
         {/* Authentication screen */}
@@ -91,7 +92,22 @@ export default function RootLayout() {
         component={SidebarLayout} 
         options={{ title: 'SidebarLayout' }}
         />
-        
+        <Stack.Screen 
+        name="AdminDashboard" 
+        component={AdminDashboard} 
+        options={{ title: 'AdminDashboard' }}
+        />
+        <Stack.Screen 
+        name="AdminSideBar" 
+        component={AdminSideBar} 
+        options={{ title: 'AdminDashboard' }}
+        />
+        <Stack.Screen 
+        name="Notifications" 
+        component={Notifications} 
+        options={{ title: 'Notifications' }}
+        />
+
 
       </Stack.Navigator>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
