@@ -78,6 +78,7 @@ const Notifications = () => {
   };
 
   return (
+    
     <View style={styles.container}>
       <TouchableOpacity
         style={styles.backButton}

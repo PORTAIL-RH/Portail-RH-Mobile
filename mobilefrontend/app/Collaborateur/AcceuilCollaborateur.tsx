@@ -1,107 +1,139 @@
-import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Switch, useColorScheme } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  SafeAreaView,
+  ActivityIndicator,
+  TouchableOpacity,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import AsyncStorage from '@react-native-async-storage/async-storage';  
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from 'react-native';
+
+import Navbar from '../Components/NavBar';
+import Footer from '../Components/Footer';
 
 // Define the navigation stack types
 export type RootStackParamList = {
-  AcceuilCollaborateur: undefined;
+  AccueilCollaborateur: undefined;
   Profile: undefined;
+  Demandestot: undefined;
+  Authentification: undefined;
+  Notifications: undefined;
+  Autorisation: undefined;
 };
 
 // Define the navigation prop type
-type AcceuilCollaborateurNavigationProp = NativeStackNavigationProp<
+type AccueilCollaborateurNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
-  'AcceuilCollaborateur'
+  'AccueilCollaborateur'
 >;
 
-const AcceuilCollaborateur = () => {
-  const navigation = useNavigation<AcceuilCollaborateurNavigationProp>();
-  const [isEnabled, setIsEnabled] = React.useState(false);
-  const [isDarkMode, setIsDarkMode] = React.useState(false);  // Etat du mode
+const AccueilCollaborateur = () => {
+  const navigation = useNavigation<AccueilCollaborateurNavigationProp>();
+  const colorScheme = useColorScheme();
+  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
+  const [userName, setUserName] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const toggleSwitch = () => {
-    setIsEnabled(previousState => !previousState);
-    setIsDarkMode(previousState => !previousState);  // Basculer le mode
-  };
-
-  // Sauvegarde dans AsyncStorage
-  const storeThemePreference = async () => {
-    try {
-      await AsyncStorage.setItem('@theme_mode', JSON.stringify(isDarkMode));
-    } catch (error) {
-      console.log('Erreur de stockage du mode', error);
-    }
-  };
-
-  // Récupérer la préférence du mode au démarrage
-  const getStoredTheme = async () => {
-    try {
-      const storedMode = await AsyncStorage.getItem('@theme_mode');
-      if (storedMode !== null) {
-        setIsDarkMode(JSON.parse(storedMode));
-        setIsEnabled(JSON.parse(storedMode));  // Mettre à jour le switch
-      }
-    } catch (error) {
-      console.log('Erreur de récupération du mode', error);
-    }
-  };
-
-  // Utiliser useEffect pour récupérer et stocker le mode lorsque le composant se monte
+  // Load theme preference and user info on component mount
   useEffect(() => {
-    getStoredTheme();
+    const loadData = async () => {
+      await loadThemePreference();
+      await getUserInfo();
+    };
+    loadData();
   }, []);
 
-  useEffect(() => {
-    storeThemePreference();
-  }, [isDarkMode]);
+  // Load theme preference from AsyncStorage
+  const loadThemePreference = async () => {
+    try {
+      const storedTheme = await AsyncStorage.getItem('@theme_mode');
+      if (storedTheme !== null) {
+        setIsDarkMode(storedTheme === 'dark');
+      }
+    } catch (error) {
+      console.error('Error loading theme preference:', error);
+    }
+  };
 
+  // Toggle theme between light and dark mode
+  const toggleTheme = async () => {
+    const newTheme = isDarkMode ? 'light' : 'dark';
+    setIsDarkMode(!isDarkMode);
+    try {
+      await AsyncStorage.setItem('@theme_mode', newTheme);
+    } catch (error) {
+      console.error('Error saving theme preference:', error);
+    }
+  };
+
+  // Fetch user info from AsyncStorage and API
+  const getUserInfo = async () => {
+    try {
+      const userInfo = await AsyncStorage.getItem('userInfo');
+      if (userInfo) {
+        const parsedUser = JSON.parse(userInfo);
+        const response = await fetch(`http://192.168.1.32:8080/api/Personnel/byId/${parsedUser.id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch user info');
+        }
+        const data = await response.json();
+        setUserName(data.nom || 'Utilisateur');
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('userInfo');
+      await AsyncStorage.removeItem('userToken');
+      navigation.navigate('Authentification');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
+  // Apply theme styles
   const themeStyles = isDarkMode ? darkStyles : lightStyles;
 
   return (
-    <View style={[styles.container, themeStyles.container]}>
+    <SafeAreaView style={[styles.container, themeStyles.container]}>
+      {/* Navbar */}
+      <Navbar isDarkMode={isDarkMode} toggleTheme={toggleTheme} handleLogout={handleLogout} />
+
+      {/* Content */}
+      <View style={styles.contentContainer}>
+        {loading ? (
+          <ActivityIndicator size="large" color="#9370DB" />
+        ) : (
+          <View style={[styles.welcomeContainer, themeStyles.welcomeContainer]}>
+            <Text style={[styles.userName, themeStyles.text]}>Bienvenue, {userName} !</Text>
+          </View>
+        )}
+      </View>
+
       {/* Scrollable Content */}
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Profile Section */}
-        <View style={styles.profileSection}>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.profile}>
-            <View style={styles.profileImageContainer}>
-              <Image source={require('../../assets/images/profile.png')} style={styles.profileImage} />
-            </View>
-            <Text style={[styles.profileName, themeStyles.text]}>Fida</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Image source={require('../../assets/images/notification.png')} style={styles.notificationIcon} />
-          </TouchableOpacity>
-           {/*<View style={styles.switchContainer}>
-           <Switch
-              trackColor={{ false: "#767577", true: "#9370DB" }}
-              thumbColor={isEnabled ? "#fff" : "#f4f3f4"}
-              ios_backgroundColor="#3e3e3e"
-              onValueChange={toggleSwitch}
-              value={isEnabled}
-            />
-           
-          </View>*/}
-        </View>
-
-        {/* Main Content */}
-        <View style={styles.mainContent}>
-          <Text style={[styles.titleMauve, themeStyles.text]}>
-            Welcome!<Text style={styles.titleBold}> </Text>
-          </Text>
-        </View>
-
-        {/* Destination Section */}
+      <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: 100 }]}>
+        {/* Requests Section */}
         <View style={styles.destinationSection}>
           <Text style={[styles.destinationTitle, themeStyles.text]}>Demandes</Text>
-          <Text style={styles.viewAll}>View all</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Demandestot')}>
+            <Text style={[styles.viewAll, themeStyles.viewalldark]}>View all</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Add Request Section */}
-        <View style={styles.addRequestContainer}>
-          <Text style={styles.addRequestText}>Ajouter une nouvelle demande</Text>
+        <View style={[styles.addRequestContainer, themeStyles.addRequestContainer]}>
+          <Text style={[styles.addRequestText, themeStyles.text]}>Ajouter une nouvelle demande</Text>
           <TouchableOpacity
             style={styles.addRequestButton}
             onPress={() => navigation.navigate('Autorisation')}
@@ -111,186 +143,122 @@ const AcceuilCollaborateur = () => {
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={[styles.bottomNavigation, themeStyles.bottomNav]}>
-        <TouchableOpacity style={styles.navItem}>
-          <Image source={require('../../assets/images/home.png')} style={styles.navIcon} />
-          <Text style={styles.navTextActive}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('Calendar')} style={styles.navItem}>
-          <Image source={require('../../assets/images/calendar.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Calendar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Image source={require('../../assets/images/cloche.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Notifications</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.navItem}>
-          <Image source={require('../../assets/images/profile.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Profile</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {/* Footer */}
+      <Footer />
+    </SafeAreaView>
   );
 };
 
-
-
-const lightStyles = {
+// Light and Dark Mode Styles
+const lightStyles = StyleSheet.create({
   container: {
     backgroundColor: '#F5F5F5',
   },
   text: {
-    color: '#333',
+    color: '#000',
   },
-  bottomNav: {
-    backgroundColor: '#FFF',
-  },
-};
-
-const darkStyles = {
-  container: {
-    backgroundColor: '#333',
-  },
-  text: {
+  textH: {
     color: '#FFF',
   },
-  bottomNav: {
-    backgroundColor: '#444',
+  welcomeContainer: {
+    backgroundColor: '#FFF',
   },
-};
+  addRequestContainer: {
+    backgroundColor: '#FFF',
+  },
+  viewalldark: {
+    color: '#0e135f',
+  },
+});
+
+const darkStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#121212',
+  },
+  text: {
+    color: '#FFFFFF',
+  },
+  textH: {
+    color: '#FFFFFF',
+  },
+  welcomeContainer: {
+    backgroundColor: '#1E1E1E',
+  },
+  addRequestContainer: {
+    backgroundColor: '#1E1E1E',
+  },
+  viewalldark: {
+    color: '#9370DB',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContainer: {
-    paddingTop: 40,
-    paddingHorizontal: 20,
-    paddingBottom: 100, // Add padding to avoid overlapping with the bottom navigation
-  },
-  profileSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  profile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  profileImageContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E0E0E0',
+  contentContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+    margin: 40,
   },
-  profileImage: {
-    width: 45,
-    height: 45,
-    borderRadius: 25,
+  welcomeContainer: {
+    padding: 20,
+    borderRadius: 15,
+    shadowColor: '#191970',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 1, height: 5 },
+    shadowRadius: 10,
+    elevation: 5,
   },
-  profileName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  notificationButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationIcon: {
-    width: 24,
-    height: 24,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
-  mainContent: {
-    marginBottom: 20,
-  },
-  titleMauve: {
-    fontSize: 36,
-  },
-  titleBold: {
+  userName: {
+    fontSize: 28,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  scrollContainer: {
+    paddingTop: 10,
+    paddingHorizontal: 20,
   },
   destinationSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 10,
   },
   destinationTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
   },
   viewAll: {
     fontSize: 16,
-    color: '#9370DB',
+    fontWeight: '600',
   },
   addRequestContainer: {
     marginTop: 20,
     padding: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFF',
+    borderRadius: 15,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
-    elevation: 3,
+    shadowRadius: 10,
+    elevation: 5,
   },
   addRequestText: {
-    fontSize: 18,
+    fontSize: 20,
     marginBottom: 10,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   addRequestButton: {
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#9370DB',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#7E99A3',
     alignItems: 'center',
   },
   addRequestButtonText: {
     color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  bottomNavigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderColor: '#DDD',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  navItem: {
-    alignItems: 'center',
-  },
-  navIcon: {
-    width: 24,
-    height: 24,
-  },
-  navText: {
-    fontSize: 12,
-    color: '#888',
-  },
-  navTextActive: {
-    fontSize: 12,
-    color: '#9370DB',
+    fontSize: 18,
     fontWeight: '700',
   },
 });
 
-export default AcceuilCollaborateur;
+export default AccueilCollaborateur;

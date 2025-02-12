@@ -6,62 +6,160 @@ import {
   StyleSheet,
   View,
   Alert,
+  Platform,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import SidebarLayout from './SidebarLayout';
-import Icon from 'react-native-vector-icons/MaterialIcons'; // Import icon library
 import * as DocumentPicker from 'expo-document-picker';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Define the type for the file state
+type DocumentPickerAsset = {
+  uri: string;
+  name: string;
+  mimeType?: string;
+};
 
 const Autorisation = () => {
   const [dateDebut, setDateDebut] = useState(new Date());
   const [timeSortie, setTimeSortie] = useState(new Date());
   const [timeRetour, setTimeRetour] = useState(new Date());
-
   const [showPickerDebut, setShowPickerDebut] = useState(false);
   const [showPickerSortie, setShowPickerSortie] = useState(false);
   const [showPickerRetour, setShowPickerRetour] = useState(false);
-  const [file, setFile] = useState(null); // Store file object
+  const [file, setFile] = useState<DocumentPickerAsset | null>(null); // Properly type the file state
+  const [description, setDescription] = useState('');
 
+  const handleFileUpload = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Allow all file types
+      });
 
-    const handleFileUpload = async () => {
-      try {
-        const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
-        if (res.type === 'success') {
-          setFile(res); // Save the file object
-        }
-      } catch (err) {
-        console.error('Error picking file:', err);
-        Alert.alert('Erreur', 'Une erreur est survenue lors de la sélection du fichier.');
+      if (result.canceled) {
+        console.log('File selection cancelled by the user.');
+        return;
       }
-    };
 
-  // Handle date selection for Date de début
-  const onChangeDebut = (event, selectedDate) => {
-    setShowPickerDebut(false);
+      if (result.assets && result.assets.length > 0) {
+        const file = result.assets[0]; // Access the first selected file
+        setFile(file);
+        console.log('File selected:', file.name);
+      } else {
+        console.log('No file selected.');
+      }
+    } catch (err) {
+      console.error('Error picking file:', err);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de la sélection du fichier.');
+    }
+  };
+
+  const onChangeDebut = (event: DateTimePickerEvent, selectedDate: Date | undefined) => {
+    if (Platform.OS === 'android') setShowPickerDebut(false);
     if (selectedDate) setDateDebut(selectedDate);
   };
 
-  // Handle time selection for Heure min sortie
-  const onChangeSortie = (event, selectedTime) => {
+  const onChangeSortie = (event: DateTimePickerEvent, selectedTime: Date | undefined) => {
     setShowPickerSortie(false);
     if (selectedTime) setTimeSortie(selectedTime);
   };
 
-  // Handle time selection for Heure min retour
-  const onChangeRetour = (event, selectedTime) => {
+  const onChangeRetour = (event: DateTimePickerEvent, selectedTime: Date | undefined) => {
     setShowPickerRetour(false);
     if (selectedTime) setTimeRetour(selectedTime);
   };
 
-  const handleSubmit = () => {
-    alert('Demande de Formation soumise avec succès!');
+  const validateForm = () => {
+    if (!dateDebut || !timeSortie || !timeRetour || !description) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    console.log('handleSubmit called');
+
+    if (!validateForm()) {
+      console.log('Form validation failed');
+      return;
+    }
+
+    const userInfoString = await AsyncStorage.getItem('userInfo');
+    console.log('User Info:', userInfoString);
+
+    if (!userInfoString) {
+      Alert.alert('Erreur', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
+      return;
+    }
+
+    const userInfo = JSON.parse(userInfoString);
+    const matPersId = userInfo.id; // Assuming the matricule is stored in the `id` field
+
+    if (!matPersId) {
+      Alert.alert('Erreur', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('dateDebut', dateDebut.toISOString().split('T')[0]);
+    formData.append('dateFin', dateDebut.toISOString().split('T')[0]);
+    formData.append('texteDemande', description);
+    formData.append('heureSortie', timeSortie.toTimeString().split(' ')[0]);
+    formData.append('heureRetour', timeRetour.toTimeString().split(' ')[0]);
+    formData.append('codAutorisation', 'AUTORISATION_CODE');
+    formData.append('codeSoc', 'SOC_CODE');
+    formData.append('matPersId', matPersId); // Use the actual matPersId from userInfo
+
+    if (file) {
+      const fileUri = Platform.OS === 'android' ? file.uri : file.uri.replace('file://', '');
+      formData.append('file', {
+        uri: fileUri,
+        type: file.mimeType || 'application/octet-stream',
+        name: file.name,
+      } as any);
+    }
+
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      console.log('User Token:', token);
+
+      if (!token) {
+        Alert.alert('Erreur', 'Vous devez être connecté pour soumettre une demande.');
+        return;
+      }
+
+      const response = await axios.post('http://192.168.1.32:8080/api/demande-autorisation/create', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      console.log('API Response:', response.data);
+
+      if (response.status === 200) {
+        Alert.alert('Succès', 'Demande soumise avec succès!');
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      if (axios.isAxiosError(error)) {
+        Alert.alert('Erreur', error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
+      } else if (error instanceof Error) {
+        Alert.alert('Erreur', error.message);
+      } else {
+        Alert.alert('Erreur', "Une erreur inconnue est survenue.");
+      }
+    }
   };
 
   return (
     <SidebarLayout>
       <View style={styles.header}>
-        <Icon name="fact-check" size={24} color="#4c00b4" />
-        <Text style={styles.title}>Ajouter Autorisation</Text>
+        <Icon name="fact-check" size={24} color="#0e135f" />
+        <Text style={styles.title}>Ajouter une Demande d'Autorisation</Text>
       </View>
 
       <Text style={styles.label}>Date de début</Text>
@@ -84,8 +182,7 @@ const Autorisation = () => {
         />
       )}
 
-      {/* Heure min sortie */}
-      <Text style={styles.label}>Heure min sortie</Text>
+      <Text style={styles.label}>Heure sortie</Text>
       <TouchableOpacity onPress={() => setShowPickerSortie(true)}>
         <View style={styles.inputContainer}>
           <Icon name="access-time" size={20} color="#999" />
@@ -106,8 +203,7 @@ const Autorisation = () => {
         />
       )}
 
-      {/* Heure min retour */}
-      <Text style={styles.label}>Heure min retour</Text>
+      <Text style={styles.label}>Heure retour</Text>
       <TouchableOpacity onPress={() => setShowPickerRetour(true)}>
         <View style={styles.inputContainer}>
           <Icon name="access-time" size={20} color="#999" />
@@ -128,6 +224,12 @@ const Autorisation = () => {
         />
       )}
 
+      <Text style={styles.label}>Pièce jointe</Text>
+      <TouchableOpacity style={styles.inputContainer} onPress={handleFileUpload}>
+        <Icon name="attach-file" size={20} color="#999" />
+        <Text style={styles.input}>{file ? file.name : 'Choisir un fichier'}</Text>
+      </TouchableOpacity>
+
       <Text style={styles.label}>Description</Text>
       <View style={styles.inputContainer}>
         <Icon name="description" size={20} color="#999" />
@@ -136,14 +238,9 @@ const Autorisation = () => {
           multiline
           numberOfLines={4}
           placeholder="Entrez une description"
+          onChangeText={(text) => setDescription(text)}
         />
       </View>
-
-        <Text style={styles.label}>Pièce jointe</Text>
-        <TouchableOpacity style={styles.inputContainer} onPress={handleFileUpload}>
-          <Icon name="attach-file" size={20} color="#999" />
-          <Text style={styles.input}>{file ? file.name : 'Choisir un fichier'}</Text>
-        </TouchableOpacity>
 
       <TouchableOpacity style={styles.button} onPress={handleSubmit}>
         <Icon name="send" size={20} color="#fff" style={styles.buttonIcon} />
@@ -163,7 +260,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginLeft: 8,
-    color: '#4c00b4',
+    color: '#0e135f',
   },
   label: {
     fontSize: 16,
@@ -190,7 +287,7 @@ const styles = StyleSheet.create({
   },
   button: {
     flexDirection: 'row',
-    backgroundColor: '#4c00b4',
+    backgroundColor: '#0e135f',
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -206,7 +303,3 @@ const styles = StyleSheet.create({
 });
 
 export default Autorisation;
-function setFile(res: DocumentPicker.DocumentPickerResult) {
-  throw new Error('Function not implemented.');
-}
-

@@ -24,7 +24,7 @@ const SidebarLayout = ({ children }) => {
           >
             <Text style={styles.closeButtonText}>X</Text>
           </TouchableOpacity>
-          <Text style={styles.sidebarTitle}>Demande</Text>
+          <Text style={styles.sidebarTitle}>Demandes : </Text>
           <TouchableOpacity
             style={styles.sidebarItem}
             onPress={() => navigation.navigate('Autorisation')}
@@ -49,7 +49,7 @@ const SidebarLayout = ({ children }) => {
       {/* Main Content */}
       <ScrollView contentContainerStyle={styles.mainContent}>
         <View style={styles.profileSection}>
-          <TouchableOpacity onPress={() => navigation.navigate('AcceuilCollaborateur')}>
+          <TouchableOpacity onPress={() => navigation.navigate('AccueilCollaborateur')}>
             <Image
               source={require('../../../assets/images/fleche.png')}
               style={styles.fleche}
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 250,
     height: '100%',
-    backgroundColor: '#4c00b4',
+    backgroundColor: '#0e135f',
     padding: 20,
     zIndex: 10,
   },
@@ -94,6 +94,8 @@ const styles = StyleSheet.create({
   },
   sidebarItem: {
     marginBottom: 15,
+    paddingLeft:20,
+
   },
   sidebarText: {
     color: '#fff',
