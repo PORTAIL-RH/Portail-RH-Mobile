@@ -20,7 +20,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as MediaLibrary from 'expo-media-library';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Button, Portal, Provider } from 'react-native-paper';
+import { Button } from 'react-native-paper';
+import { API_CONFIG } from '../../config';
 
 // Define interfaces for types, titles, and themes
 interface Titre {
@@ -76,13 +77,12 @@ const Formation = () => {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('userToken');
-      console.log('Token:', token); // Debugging
       if (!token) {
         console.error('No token found. User is not authenticated.');
         return;
       }
 
-      const response = await axios.get('http://192.168.1.32:8080/api/titres/', {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/titres/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -94,7 +94,6 @@ const Formation = () => {
         name: titre.titre, // Use `titre.titre` as the name
       }));
 
-      console.log('Transformed Titres:', transformedTitres); // Debugging
       setTitres(transformedTitres); // Set the transformed titres in the state
     } catch (error) {
       console.error('Error fetching titres:', error);
@@ -114,7 +113,7 @@ const Formation = () => {
         return;
       }
 
-      const response = await axios.get(`http://192.168.1.32:8080/api/titres/${titreId}/types`, {
+      const response = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/titres/${titreId}/types`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -128,7 +127,6 @@ const Formation = () => {
           name: type.type, // Use `type.type` as the name
         }));
 
-      console.log('Transformed Types:', transformedTypes); // Debugging
       setTypes(transformedTypes);
     } catch (error) {
       console.error('Error fetching types:', error);
@@ -155,7 +153,7 @@ const Formation = () => {
 
       // Use selectedTitre.id from state
       const response = await axios.get(
-        `http://192.168.1.32:8080/api/titres/${selectedTitre.id}/types/${typeId}/themes`,
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/titres/${selectedTitre.id}/types/${typeId}/themes`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -171,7 +169,6 @@ const Formation = () => {
           name: theme.theme, // Use `theme.theme` as the name
         }));
 
-      console.log('Transformed Themes:', transformedThemes); // Debugging
       setThemes(transformedThemes);
     } catch (error) {
       console.error('Error fetching themes:', error);
@@ -255,7 +252,7 @@ const Formation = () => {
         return;
       }
 
-      const response = await axios.post('http://192.168.1.32:8080/api/demande-formation/create', formData, {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-formation/create`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
@@ -457,7 +454,6 @@ const Formation = () => {
     </SidebarLayout>
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     padding: 20,

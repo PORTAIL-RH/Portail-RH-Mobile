@@ -6,6 +6,7 @@ import { useFonts } from 'expo-font';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { API_CONFIG, setApiConfig } from './config'; // Import the config
 
 // Importation des composants
 import Authentification from './Collaborateur/Authentification';
@@ -44,6 +45,11 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  // Set the API configuration dynamically
+  useEffect(() => {
+    setApiConfig("http://172.20.10.7", "8080"); // Set your desired base URL and port here
+  }, []);
 
   // Écran de chargement si les polices ne sont pas encore chargées
   if (!fontsLoaded && !fontError) {

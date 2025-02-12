@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import DatePicker from 'react-native-date-picker';
 import { Picker } from '@react-native-picker/picker';
+import { API_CONFIG } from '../config';
 
 // Define the props for the DemandeItem component
 interface Demande {
@@ -103,11 +104,11 @@ const ListDemandesScreen = () => {
       const matPersId = userInfo.id;
 
       const responseAutorisation = await axios.get(
-        `http://192.168.1.32:8080/api/demande-autorisation`
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-autorisation`
       );
 
       const responseConge = await axios.get(
-        `http://192.168.1.32:8080/api/demande-conge`
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge`
       );
 
       const combinedDemandes = [

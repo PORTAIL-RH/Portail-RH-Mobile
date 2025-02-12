@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { API_CONFIG } from '../config';
 
 
 type Notification = {
@@ -27,7 +28,6 @@ type RootStackParamList = {
   Notifications: undefined;
 };
 
-const BACKEND_URL = 'http://localhost:8080'; 
 type NotificationsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Notifications'>;
 
 const Notifications = () => {
@@ -42,7 +42,7 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/notifications`);
+      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/notifications`);
       const data = await response.json();
       setNotifications(data);
     } catch (error) {
@@ -52,7 +52,7 @@ const Notifications = () => {
 
   const fetchUnreadCount = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/notifications/unreadnbr`);
+      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/notifications/unreadnbr`);
       const count = await response.json();
       setUnreadCount(count);
     } catch (error) {
@@ -62,7 +62,7 @@ const Notifications = () => {
 
   const markAsViewed = async (id: string) => {
     try {
-      await fetch(`${BACKEND_URL}/api/notifications/${id}/view`, {
+      await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/notifications/${id}/view`, {
         method: 'POST',
       });
       // Update the local state to mark the notification as viewed

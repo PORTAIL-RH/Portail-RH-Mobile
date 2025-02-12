@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Navbar from '../../Components/NavBar';
 import Footer from '../../Components/Footer';
+import { API_CONFIG } from '../../config';
 
 // Define the types for demandes
 interface Demande {
@@ -122,9 +123,9 @@ const ListDemandesScreen = () => {
 
       // Fetch all demandes in parallel
       const [autorisationResponse, formationResponse, congeResponse] = await Promise.all([
-        axios.get(`http://192.168.1.32:8080/api/demande-autorisation/personnel/${matPersId}`),
-        axios.get(`http://192.168.1.32:8080/api/demande-formation/personnel/${matPersId}`),
-        axios.get(`http://192.168.1.32:8080/api/demande-conge/personnel/${matPersId}`),
+        axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-autorisation/personnel/${matPersId}`),
+        axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-formation/personnel/${matPersId}`),
+        axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${matPersId}`),
       ]);
 
       // Combine all demandes into a single array with a type field

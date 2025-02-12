@@ -15,6 +15,7 @@ import { useColorScheme } from 'react-native';
 
 import Navbar from '../Components/NavBar';
 import Footer from '../Components/Footer';
+import { API_CONFIG } from '../config';
 
 // Define the navigation stack types
 export type RootStackParamList = {
@@ -77,7 +78,7 @@ const AccueilCollaborateur = () => {
       const userInfo = await AsyncStorage.getItem('userInfo');
       if (userInfo) {
         const parsedUser = JSON.parse(userInfo);
-        const response = await fetch(`http://192.168.1.32:8080/api/Personnel/byId/${parsedUser.id}`);
+        const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${parsedUser.id}`);
         if (!response.ok) {
           throw new Error('Failed to fetch user info');
         }

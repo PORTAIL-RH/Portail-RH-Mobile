@@ -4,8 +4,8 @@ import axios from "axios";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Toast from "react-native-toast-message"; 
-
+import Toast from "react-native-toast-message";
+import { API_CONFIG } from '../config';
 // Define the navigation stack types
 type AuthentificationStackParamList = {
   Authentification: undefined;
@@ -48,7 +48,7 @@ const Authentication = () => {
     }
 
     try {
-      const response = await axios.post("http://localhost:8080/api/Personnel/register", {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/register`, {
         nom: username,
         matricule,
         email,
@@ -73,7 +73,7 @@ const Authentication = () => {
 
   const handleLogin = async () => {
     try {
-      const response = await axios.post("http://192.168.1.32:8080/api/Personnel/login", {
+      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`, {
         matricule,
         motDePasse: password,
       });
@@ -151,7 +151,6 @@ const Authentication = () => {
     </View>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
