@@ -14,6 +14,7 @@ import SidebarLayout from './SidebarLayout';
 import * as DocumentPicker from 'expo-document-picker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_CONFIG } from '../../config';
 
 // Define the type for the file state
 type DocumentPickerAsset = {
@@ -131,7 +132,7 @@ const Autorisation = () => {
         return;
       }
 
-      const response = await axios.post('http://192.168.1.32:8080/api/demande-autorisation/create', formData, {
+      const response = await axios.post('${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-autorisation/create', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`,

@@ -16,6 +16,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as MediaLibrary from 'expo-media-library';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_CONFIG } from '../../config';
 
 const Conge = () => {
   const [dateDebut, setDateDebut] = useState(new Date());
@@ -147,7 +148,7 @@ const Conge = () => {
         return;
       }
 
-      const response = await axios.post('http://192.168.1.32:8080/api/demande-conge/create', formData, {
+      const response = await axios.post('${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/create', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`,

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Animated, Image, TouchableOpacity }
 import { Appbar, Card, Title, Paragraph, Badge } from 'react-native-paper'; 
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import AdminSideBar from './AdminSideBar';
+import { API_CONFIG } from '../config';
 
 // Define the RootStackParamList with all routes
 export type RootStackParamList = {
@@ -31,7 +32,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
 
   const fetchUnreadCount = async () => {
     try {
-      const response = await fetch('http://localhost:9070/api/notifications/unreadnbr');
+      const response = await fetch('${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/notifications/unreadnbr');
       const count = await response.json();
       setUnreadCount(count);
     } catch (error) {
