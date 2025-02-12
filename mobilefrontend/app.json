@@ -15,7 +15,11 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.portailrh.mobilefrontend"
+    },
+    "devDependencies": {
+      "@react-native-community/cli": "latest"
     },
     "web": {
       "bundler": "metro",

@@ -1,66 +1,149 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, StyleSheet, SafeAreaView, useColorScheme } from 'react-native';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Navbar from '../Components/NavBar'; 
+import Footer from '../Components/Footer'; 
 
-// Définition explicite des types de navigation
 type RootStackParamList = {
-  AcceuilCollaborateur: undefined;
+  AccueilCollaborateur: undefined;
   Profile: undefined;
+  Calendar: undefined;
+  Notifications: undefined;
 };
 
 const ProfilePage = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const colorScheme = useColorScheme();
+  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
+
+  useEffect(() => {
+    const loadData = async () => {
+      await loadThemePreference();
+      await getUserInfo();
+    };
+    loadData();
+  }, []);
+
+  // Load theme preference from AsyncStorage
+  const loadThemePreference = async () => {
+    try {
+      const storedTheme = await AsyncStorage.getItem('@theme_mode');
+      if (storedTheme !== null) {
+        setIsDarkMode(storedTheme === 'dark');
+      }
+    } catch (error) {
+      console.error('Error loading theme preference:', error);
+    }
+  };
+
+  // Toggle theme between light and dark mode
+  const toggleTheme = async () => {
+    const newTheme = isDarkMode ? 'light' : 'dark';
+    setIsDarkMode(!isDarkMode);
+    try {
+      await AsyncStorage.setItem('@theme_mode', newTheme);
+    } catch (error) {
+      console.error('Error saving theme preference:', error);
+    }
+  };
+
+  // Fetch user data from AsyncStorage and API
+  const getUserInfo = async () => {
+    try {
+      const userInfo = await AsyncStorage.getItem('userInfo');
+      if (userInfo) {
+        const parsedUser = JSON.parse(userInfo);
+        const response = await fetch(`http://192.168.1.32:8080/api/Personnel/byId/${parsedUser.id}`);
+        if (!response.ok) {
+          throw new Error('Erreur lors de la récupération des données');
+        }
+        const data = await response.json();
+        setUserInfo(data);
+      }
+    } catch (error) {
+      console.log('Erreur lors de la récupération des infos utilisateur', error);
+    }
+  };
+
+  useEffect(() => {
+    getUserInfo();
+  }, []);
+
+  if (!userInfo) {
+    return (
+      <SafeAreaView style={[styles.container, isDarkMode ? darkStyles.container : lightStyles.container]}>
+        <Text style={isDarkMode ? darkStyles.text : lightStyles.text}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const themeStyles = isDarkMode ? darkStyles : lightStyles;
 
   return (
-    <View style={styles.container}>
-      {/* Profile Section */}
-    
-      {/* Profile Card */}
-      <View style={styles.profileCard}>
-        <Image source={require('../../assets/images/profile.png')} style={styles.profileImage} />
-        <Text style={styles.profileName}>Fida</Text>
+    <SafeAreaView style={[styles.container, themeStyles.container]}>
+      {/* Navbar */}
+      <Navbar 
+        isDarkMode={isDarkMode} 
+        toggleTheme={toggleTheme} 
+        handleLogout={() => { /* Add your logout logic here */ }} 
+      />
 
-        <View style={styles.infoSection}>
-          <Text style={styles.infoLabel}>Email:</Text>
-          <Text style={styles.infoText}>fida@example.com</Text>
+      <View style={styles.contentContainer}>
+        {/* Profile Section */}
+        <View style={styles.profileCard}>
+          <Image
+            source={userInfo.profileImage ? { uri: userInfo.profileImage } : require('../../assets/images/profile.png')}
+            style={styles.profileImage}
+          />
+          <Text style={[styles.profileName, themeStyles.text]}>{userInfo.nom}</Text>
 
-          <Text style={styles.infoLabel}>Matricule:</Text>
-          <Text style={styles.infoText}>123456</Text>
+          <View style={styles.infoSection}>
+            <Text style={[styles.infoLabel, themeStyles.text]}>Email:</Text>
+            <Text style={[styles.infoText, themeStyles.text]}>{userInfo.email}</Text>
 
-          <Text style={styles.infoLabel}>Role:</Text>
-          <Text style={styles.infoText}>Administrator</Text>
+            <Text style={[styles.infoLabel, themeStyles.text]}>Matricule:</Text>
+            <Text style={[styles.infoText, themeStyles.text]}>{userInfo.matricule}</Text>
+
+            <Text style={[styles.infoLabel, themeStyles.text]}>Role:</Text>
+            <Text style={[styles.infoText, themeStyles.text]}>{userInfo.role}</Text>
+          </View>
         </View>
       </View>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNavigation}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AcceuilCollaborateur')}>
-          <Image source={require('../../assets/images/home.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Image source={require('../../assets/images/calendar.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Calendar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Image source={require('../../assets/images/cloche.png')} style={styles.navIcon} />
-          <Text style={styles.navText}>Notifications</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Image source={require('../../assets/images/profile.png')} style={styles.navIcon} />
-          <Text style={styles.navTextActive}>Profile</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      
+      {/* Footer */}
+      <Footer />
+    </SafeAreaView>
   );
 };
+
+const lightStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#F5F5F5',
+  },
+  text: {
+    color: '#000',
+  },
+});
+
+const darkStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#000000',
+  },
+  text: {
+    color: '#FFF',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  contentContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#E6E6FA',
   },
   profileCard: {
     backgroundColor: '#FFF',
@@ -68,48 +151,23 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     alignItems: 'center',
     width: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 10,
+    shadowColor: '#0e135f',
+    shadowOffset: { width: 7, height: 7 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
   },
   profileImage: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: '#9370DB',
+    borderColor: '#0e135f',
   },
-
   profileName: {
     fontSize: 30,
     fontWeight: '700',
     marginTop: 10,
-    color: '#4B0082',
-  },
-  profileSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  profile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  profileImageContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  notificationIcon: {
-    width: 24,
-    height: 24,
+    color: '#0e135f',
   },
   infoSection: {
     marginTop: 20,
@@ -118,40 +176,12 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#4B0082',
+    color: '#0e135f',
   },
   infoText: {
     fontSize: 18,
     marginBottom: 10,
     color: '#333',
-  },
-  bottomNavigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    width: '100%',
-    position: 'absolute',
-    bottom: 0,
-    backgroundColor: '#FFF',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderColor: '#ddd',
-  },
-  navItem: {
-    alignItems: 'center',
-  },
-  navIcon: {
-    width: 24,
-    height: 24,
-  },
-  navText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  navTextActive: {
-    fontSize: 14,
-    color: '#8A2BE2',
-    fontWeight: '700',
   },
 });
 

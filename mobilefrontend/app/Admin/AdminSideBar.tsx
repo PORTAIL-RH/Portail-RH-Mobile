@@ -14,6 +14,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   Authentification: undefined;
+  DemandesAdmin:undefined;
 };
 
 const AdminSideBar: React.FC<AdminSideBarProps> = ({ navigation, onClose }) => {
@@ -31,18 +32,22 @@ const AdminSideBar: React.FC<AdminSideBarProps> = ({ navigation, onClose }) => {
 
         <TouchableOpacity style={styles.sidebarItem} onPress={() => navigation.navigate('Personnel')}>
           <MaterialCommunityIcons name="account-group" size={24} color="white" />
-          <Text style={styles.sidebarText}>Personnel</Text>
+          <Text style={styles.sidebarText}>Liste des personnels</Text>
         </TouchableOpacity>
+
+
+        <TouchableOpacity style={styles.sidebarItem} onPress={() => navigation.navigate('DemandesAdmin')}>
+          <MaterialCommunityIcons name="cogs" size={24} color="white" />
+          <Text style={styles.sidebarText}>Demandes</Text>
+        </TouchableOpacity>
+
+
 
         <TouchableOpacity style={styles.sidebarItem} onPress={() => navigation.navigate('Notifications')}>
           <MaterialCommunityIcons name="bell" size={24} color="white" />
           <Text style={styles.sidebarText}>Notifications</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sidebarItem} onPress={() => navigation.navigate('Settings')}>
-          <MaterialCommunityIcons name="cogs" size={24} color="white" />
-          <Text style={styles.sidebarText}>Paramètres</Text>
-        </TouchableOpacity>
 
         <TouchableOpacity style={styles.sidebarItem} onPress={() => navigation.navigate('Authentification')}>
           <MaterialCommunityIcons name="logout" size={24} color="white" />
