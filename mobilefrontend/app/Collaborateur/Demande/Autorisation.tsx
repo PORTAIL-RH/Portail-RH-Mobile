@@ -15,6 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG } from '../../config';
+import Toast from "react-native-toast-message";
 
 // Define the type for the file state
 type DocumentPickerAsset = {
@@ -32,6 +33,14 @@ const Autorisation = () => {
   const [showPickerRetour, setShowPickerRetour] = useState(false);
   const [file, setFile] = useState<DocumentPickerAsset | null>(null); // Properly type the file state
   const [description, setDescription] = useState('');
+
+  const showToast = (type: "success" | "error", message: string) => {
+    Toast.show({
+      type,
+      text1: type === "success" ? "Success" : "Error",
+      text2: message,
+    });
+  };
 
   const handleFileUpload = async () => {
     try {
@@ -53,7 +62,7 @@ const Autorisation = () => {
       }
     } catch (err) {
       console.error('Error picking file:', err);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la sélection du fichier.');
+      showToast('error', 'Une erreur est survenue lors de la sélection du fichier.');
     }
   };
 
@@ -74,7 +83,7 @@ const Autorisation = () => {
 
   const validateForm = () => {
     if (!dateDebut || !timeSortie || !timeRetour || !description) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires.');
+      showToast('error', 'Veuillez remplir tous les champs obligatoires.');
       return false;
     }
     return true;
@@ -92,15 +101,15 @@ const Autorisation = () => {
     console.log('User Info:', userInfoString);
 
     if (!userInfoString) {
-      Alert.alert('Erreur', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
+      showToast('error', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
       return;
     }
 
     const userInfo = JSON.parse(userInfoString);
-    const matPersId = userInfo.id; // Assuming the matricule is stored in the `id` field
+    const matPersId = userInfo.id;
 
     if (!matPersId) {
-      Alert.alert('Erreur', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
+      showToast('error', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
       return;
     }
 
@@ -128,7 +137,7 @@ const Autorisation = () => {
       console.log('User Token:', token);
 
       if (!token) {
-        Alert.alert('Erreur', 'Vous devez être connecté pour soumettre une demande.');
+        showToast('error', 'Vous devez être connecté pour soumettre une demande.');
         return;
       }
 
@@ -142,16 +151,16 @@ const Autorisation = () => {
       console.log('API Response:', response.data);
 
       if (response.status === 200) {
-        Alert.alert('Succès', 'Demande soumise avec succès!');
+        showToast('success', 'Demande soumise avec succès!');
       }
     } catch (error) {
       console.error('Error submitting form:', error);
       if (axios.isAxiosError(error)) {
-        Alert.alert('Erreur', error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
+        showToast('error', error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
       } else if (error instanceof Error) {
-        Alert.alert('Erreur', error.message);
+        showToast('error', error.message);
       } else {
-        Alert.alert('Erreur', "Une erreur inconnue est survenue.");
+        showToast('error', "Une erreur inconnue est survenue.");
       }
     }
   };

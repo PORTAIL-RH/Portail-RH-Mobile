@@ -6,7 +6,6 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   ScrollView,
   Modal,
@@ -22,6 +21,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from 'react-native-paper';
 import { API_CONFIG } from '../../config';
+import Toast from 'react-native-toast-message';
 
 // Define interfaces for types, titles, and themes
 interface Titre {
@@ -56,12 +56,21 @@ const Formation = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'titre' | 'type' | 'theme' | null>(null);
 
+  // Helper function to show toast messages
+  const showToast = (type: 'success' | 'error', message: string) => {
+    Toast.show({
+      type,
+      text1: type === 'success' ? 'Success' : 'Error',
+      text2: message,
+    });
+  };
+
   // Request file permissions
   useEffect(() => {
     const requestPermissions = async () => {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission required', 'You need to grant permission to access files.');
+        showToast('error', 'You need to grant permission to access files.');
       }
     };
     requestPermissions();
@@ -78,7 +87,7 @@ const Formation = () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        console.error('No token found. User is not authenticated.');
+        showToast('error', 'No token found. User is not authenticated.');
         return;
       }
 
@@ -97,7 +106,7 @@ const Formation = () => {
       setTitres(transformedTitres); // Set the transformed titres in the state
     } catch (error) {
       console.error('Error fetching titres:', error);
-      Alert.alert('Error', 'Failed to fetch titres. Please try again.');
+      showToast('error', 'Failed to fetch titres. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -109,7 +118,7 @@ const Formation = () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        console.error('No token found. User is not authenticated.');
+        showToast('error', 'No token found. User is not authenticated.');
         return;
       }
 
@@ -130,7 +139,7 @@ const Formation = () => {
       setTypes(transformedTypes);
     } catch (error) {
       console.error('Error fetching types:', error);
-      Alert.alert('Error', 'Failed to fetch types. Please try again.');
+      showToast('error', 'Failed to fetch types. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -139,7 +148,7 @@ const Formation = () => {
   // Fetch themes by typeId
   const fetchThemesByTypeId = async (typeId: string) => {
     if (!selectedTitre) {
-      console.error('No titre selected.');
+      showToast('error', 'No titre selected.');
       return;
     }
 
@@ -147,7 +156,7 @@ const Formation = () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        console.error('No token found. User is not authenticated.');
+        showToast('error', 'No token found. User is not authenticated.');
         return;
       }
 
@@ -172,7 +181,7 @@ const Formation = () => {
       setThemes(transformedThemes);
     } catch (error) {
       console.error('Error fetching themes:', error);
-      Alert.alert('Error', 'Failed to fetch themes. Please try again.');
+      showToast('error', 'Failed to fetch themes. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -199,20 +208,20 @@ const Formation = () => {
       }
     } catch (err) {
       console.error('Error picking file:', err);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la sélection du fichier.');
+      showToast('error', 'Une erreur est survenue lors de la sélection du fichier.');
     }
   };
 
   // Handle form submission
   const handleSubmit = async () => {
     if (!selectedTitre || !selectedType || !selectedTheme || !requestText || !file) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs et sélectionner un fichier.');
+      showToast('error', 'Veuillez remplir tous les champs et sélectionner un fichier.');
       return;
     }
 
     const userInfoString = await AsyncStorage.getItem('userInfo');
     if (!userInfoString) {
-      Alert.alert('Erreur', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
+      showToast('error', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
       return;
     }
 
@@ -220,7 +229,7 @@ const Formation = () => {
     const matPersId = userInfo.id;
 
     if (!matPersId) {
-      Alert.alert('Erreur', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
+      showToast('error', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
       return;
     }
 
@@ -248,7 +257,7 @@ const Formation = () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        Alert.alert('Erreur', 'Vous devez être connecté pour soumettre une demande.');
+        showToast('error', 'Vous devez être connecté pour soumettre une demande.');
         return;
       }
 
@@ -259,10 +268,10 @@ const Formation = () => {
         },
       });
 
-      Alert.alert('Succès', 'Demande de formation soumise avec succès.');
+      showToast('success', 'Demande de formation soumise avec succès.');
     } catch (error) {
       console.error('Error submitting form:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la soumission de la demande.');
+      showToast('error', 'Une erreur est survenue lors de la soumission de la demande.');
     }
   };
 
@@ -451,6 +460,7 @@ const Formation = () => {
         </View>
         {renderModal()}
       </ScrollView>
+      <Toast />
     </SidebarLayout>
   );
 };

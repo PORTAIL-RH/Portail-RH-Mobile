@@ -8,6 +8,7 @@ import {
   Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons'; // Import icons
 
 const SidebarLayout = ({ children }) => {
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
@@ -22,26 +23,43 @@ const SidebarLayout = ({ children }) => {
             style={styles.closeButton}
             onPress={() => setIsSidebarVisible(false)}
           >
-            <Text style={styles.closeButtonText}>X</Text>
+            <Icon name="close" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.sidebarTitle}>Demandes : </Text>
+          <Text style={styles.sidebarTitle}>Demandes</Text>
           <TouchableOpacity
             style={styles.sidebarItem}
             onPress={() => navigation.navigate('Autorisation')}
           >
+            <Icon name="assignment" size={20} color="#fff" />
             <Text style={styles.sidebarText}>Autorisation</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.sidebarItem}
             onPress={() => navigation.navigate('Conge')}
           >
+            <Icon name="beach-access" size={20} color="#fff" />
             <Text style={styles.sidebarText}>Congé</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.sidebarItem}
             onPress={() => navigation.navigate('Formation')}
           >
+            <Icon name="school" size={20} color="#fff" />
             <Text style={styles.sidebarText}>Formation</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sidebarItem}
+            onPress={() => navigation.navigate('Document')}
+          >
+            <Icon name="description" size={20} color="#fff" />
+            <Text style={styles.sidebarText}>Document</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sidebarItem}
+            onPress={() => navigation.navigate('Pret')}
+          >
+            <Icon name="attach-money" size={20} color="#fff" />
+            <Text style={styles.sidebarText}>Pre-Avance</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -50,20 +68,14 @@ const SidebarLayout = ({ children }) => {
       <ScrollView contentContainerStyle={styles.mainContent}>
         <View style={styles.profileSection}>
           <TouchableOpacity onPress={() => navigation.navigate('AccueilCollaborateur')}>
-            <Image
-              source={require('../../../assets/images/fleche.png')}
-              style={styles.fleche}
-            />
+            <Icon name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.profileName}>Ajouter Demande</Text>
           <TouchableOpacity
             onPress={() => setIsSidebarVisible(true)}
             style={styles.menuImageContainer}
           >
-            <Image
-              source={require('../../../assets/images/menu.png')}
-              style={styles.menu}
-            />
+            <Icon name="menu" size={24} color="#333" />
           </TouchableOpacity>
         </View>
         {/* Inject page-specific content */}
@@ -76,37 +88,49 @@ const SidebarLayout = ({ children }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
   },
   sidebar: {
     position: 'absolute',
     left: 0,
     width: 250,
     height: '100%',
-    backgroundColor: '#0e135f',
+    backgroundColor: 'rgba(14, 19, 95, 0.95)', // Translucent background
     padding: 20,
     zIndex: 10,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 5, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 10,
   },
   sidebarTitle: {
-    fontSize: 27,
+    fontSize: 24,
     color: '#fff',
-    marginBottom: 20,
+    fontWeight: '600',
+    marginBottom: 30,
+    marginTop: 10,
   },
   sidebarItem: {
-    marginBottom: 15,
-    paddingLeft:20,
-
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Subtle hover effect
   },
   sidebarText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
+    marginLeft: 15,
+    fontWeight: '500',
   },
   closeButton: {
     alignSelf: 'flex-end',
-  },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 18,
+    padding: 10,
   },
   mainContent: {
     padding: 20,
@@ -115,23 +139,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 20,
   },
   profileName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginVertical: 20,
-  },
-  fleche: {
-    width: 30,
-    height: 30,
+    color: '#333',
   },
   menuImageContainer: {
-    width: 40,
-    height: 40,
-  },
-  menu: {
-    width: 24,
-    height: 24,
+    padding: 10,
   },
 });
 
