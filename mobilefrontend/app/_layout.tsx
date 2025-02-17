@@ -15,6 +15,10 @@ import Profile from './Collaborateur/Profile';
 import Demande from './Collaborateur/Demande';
 import Calendar from './Collaborateur/Calendar';
 import Autorisation from './Collaborateur/Demande/Autorisation';
+import Document from './Collaborateur/Demande/Document';
+import Pret from './Collaborateur/Demande/PreAvance';
+import AjouterDemande from './Collaborateur/Demande/AjouterDemande';
+
 import Conge from './Collaborateur/Demande/Conge';
 import Formation from './Collaborateur/Demande/Formation';
 import SidebarLayout from './Collaborateur/Demande/SidebarLayout';
@@ -48,7 +52,7 @@ export default function RootLayout() {
 
   // Set the API configuration dynamically
   useEffect(() => {
-    setApiConfig("http://172.20.10.7", "8080"); // Set your desired base URL and port here
+    setApiConfig("http://192.168.1.32", "8080"); // Set your desired base URL and port here
   }, []);
 
   // Écran de chargement si les polices ne sont pas encore chargées
@@ -82,6 +86,11 @@ export default function RootLayout() {
           <Stack.Screen name="Calendar" component={Calendar} options={{ title: 'Calendrier' }} />
           <Stack.Screen name="Autorisation" component={Autorisation} options={{ title: 'Autorisation' }} />
           <Stack.Screen name="Conge" component={Conge} options={{ title: 'Congés' }} />
+          <Stack.Screen name="Document" component={Document} options={{ title: 'Document' }} />
+          <Stack.Screen name="Pret" component={Pret} options={{ title: 'Pret' }} />
+          <Stack.Screen name="AjouterDemande" component={AjouterDemande} options={{ title: 'AjouterDemande' }} />
+
+          
           <Stack.Screen name="Formation" component={Formation} options={{ title: 'Formation' }} />
           <Stack.Screen name="SidebarLayout" component={SidebarLayout} options={{ title: 'Sidebar' }} />
           <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ title: 'Tableau de Bord Admin' }} />

@@ -17,6 +17,7 @@ import * as MediaLibrary from 'expo-media-library';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_CONFIG } from '../../config';
+import Toast from "react-native-toast-message";
 
 const Conge = () => {
   const [dateDebut, setDateDebut] = useState(new Date());
@@ -29,11 +30,18 @@ const Conge = () => {
   const [texteDemande, setTexteDemande] = useState('');
   const [nbrJours, setNbrJours] = useState('0');
 
+ const showToast = (type: "success" | "error", message: string) => {
+    Toast.show({
+      type,
+      text1: type === "success" ? "Success" : "Error",
+      text2: message,
+    });
+  };
   useEffect(() => {
     const requestPermissions = async () => {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission required', 'You need to grant permission to access files.');
+        showToast('error', 'You need to grant permission to access files.');
       }
     };
     requestPermissions();
@@ -75,21 +83,21 @@ const Conge = () => {
       }
     } catch (err) {
       console.error('Error picking file:', err);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la sélection du fichier.');
+      showToast('error', 'Une erreur est survenue lors de la sélection du fichier.');
     }
   };
 
   const validateForm = () => {
     if (!texteDemande.trim()) {
-      Alert.alert('Erreur', 'Le champ texte de demande est requis.');
+      showToast('error', 'Le champ texte de demande est requis.');
       return false;
     }
     if (!file) {
-      Alert.alert('Erreur', 'Veuillez joindre un fichier.');
+      showToast('error', 'Veuillez joindre un fichier.');
       return false;
     }
     if (nbrJours === '0') {
-      Alert.alert('Erreur', 'La durée du congé doit être d\'au moins un jour.');
+      showToast('error', 'La durée du congé doit être d\'au moins un jour.');
       return false;
     }
     return true;
@@ -107,7 +115,7 @@ const Conge = () => {
     console.log('User Info:', userInfoString);
 
     if (!userInfoString) {
-      Alert.alert('Erreur', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
+      showToast('error', 'Informations utilisateur non trouvées. Veuillez vous reconnecter.');
       return;
     }
 
@@ -115,7 +123,7 @@ const Conge = () => {
     const matPersId = userInfo.id; // Assuming the matricule is stored in the `id` field
 
     if (!matPersId) {
-      Alert.alert('Erreur', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
+      showToast('error', 'Matricule utilisateur non trouvé. Veuillez vous reconnecter.');
       return;
     }
 
@@ -144,7 +152,7 @@ const Conge = () => {
       console.log('User Token:', token);
 
       if (!token) {
-        Alert.alert('Erreur', 'Vous devez être connecté pour soumettre une demande.');
+        showToast('error', 'Vous devez être connecté pour soumettre une demande.');
         return;
       }
 
@@ -158,16 +166,16 @@ const Conge = () => {
       console.log('API Response:', response.data);
 
       if (response.status === 200) {
-        Alert.alert('Succès', 'Demande soumise avec succès!');
+        showToast('success', 'Demande soumise avec succès!');
       }
     } catch (error) {
       console.error('Error submitting form:', error);
       if (axios.isAxiosError(error)) {
-        Alert.alert('Erreur', error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
+        showToast('error', error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
       } else if (error instanceof Error) {
-        Alert.alert('Erreur', error.message);
+        showToast('error', error.message);
       } else {
-        Alert.alert('Erreur', "Une erreur inconnue est survenue.");
+        showToast('error', "Une erreur inconnue est survenue.");
       }
     }
   };

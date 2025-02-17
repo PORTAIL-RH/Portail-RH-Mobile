@@ -137,7 +137,7 @@ const AccueilCollaborateur = () => {
           <Text style={[styles.addRequestText, themeStyles.text]}>Ajouter une nouvelle demande</Text>
           <TouchableOpacity
             style={styles.addRequestButton}
-            onPress={() => navigation.navigate('Autorisation')}
+            onPress={() => navigation.navigate('AjouterDemande')}
           >
             <Text style={styles.addRequestButtonText}>+ Ajouter</Text>
           </TouchableOpacity>
