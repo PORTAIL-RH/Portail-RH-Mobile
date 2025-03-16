@@ -1,104 +1,180 @@
-import React from 'react';
-import { View, TouchableOpacity, Image, Text, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient'; 
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ColorValue } from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Home, User, FileText, Bell, Plus } from "lucide-react-native";
+import { useTheme } from "../ThemeContext";
 
-export type RootStackParamList = {
-    AccueilCollaborateur: undefined;
-    Calendar: undefined;
-    Notifications: undefined;
-    Profile: undefined;
-  };
-  
-const Footer = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+const { width } = Dimensions.get("window");
 
-  return (
-    <LinearGradient
-    colors={['#102C57', '#17153B']}
-    style={styles.bottomNavigation}
-    >
-      {/* Home Button */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('AccueilCollaborateur')}
-        style={styles.navItem}
-      >
-        <Image
-          source={require('../../assets/images/homee.png')}
-          style={styles.navIcon}
-        />
-        <Text style={styles.navTextActive}>Home</Text>
-      </TouchableOpacity>
-
-      {/* Calendar Button */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Calendar')}
-        style={styles.navItem}
-      >
-        <Image
-          source={require('../../assets/images/calendar.png')}
-          style={styles.navIcon}
-        />
-        <Text style={styles.navText}>Calendar</Text>
-      </TouchableOpacity>
-
-      {/* Notifications Button */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Notifications')}
-        style={styles.navItem}
-      >
-        <Image
-          source={require('../../assets/images/notif.png')}
-          style={styles.navIcon}
-        />
-        <Text style={styles.navText}>Notifications</Text>
-      </TouchableOpacity>
-
-      {/* Profile Button */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Profile')}
-        style={styles.navItem}
-      >
-        <Image
-          source={require('../../assets/images/user.png')}
-          style={styles.navIcon}
-        />
-        <Text style={styles.navText}>Profile</Text>
-      </TouchableOpacity>
-    </LinearGradient>
-  );
+type RootStackParamList = {
+  AccueilCollaborateur: undefined;
+  Demandestot: undefined;
+  AjouterDemande: undefined;
+  Notifications: undefined;
+  Profile: undefined;
 };
 
+type FooterNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const Footer = () => {
+  const navigation = useNavigation<FooterNavigationProp>();
+  const route = useRoute();
+  const { isDarkMode } = useTheme(); // Use the theme context
+
+
+  // Get current route name
+  const currentRoute = route.name;
+
+  // Apply theme styles
+  const themeStyles = isDarkMode ? darkStyles : lightStyles;
+
+  // Navigation items
+  const navigationItems = [
+    {
+      name: "AccueilCollaborateur",
+      label: "Accueil",
+      icon: (active: boolean) => <Home size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+    },
+    {
+      name: "Demandestot",
+      label: "Demandes",
+      icon: (active: boolean) => <FileText size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+    },
+    {
+      name: "AjouterDemande",
+      label: "Ajouter",
+      icon: (active: boolean) => (
+        <View style={[styles.addButtonContainer, themeStyles.addButtonContainer]}>
+          <Plus size={22} color={themeStyles.addButtonIconColor} />
+        </View>
+      ),
+      special: true,
+    },
+    {
+      name: "Notifications",
+      label: "Notifications",
+      icon: (active: boolean) => <Bell size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+    },
+    {
+      name: "Profile",
+      label: "Profil",
+      icon: (active: boolean) => <User size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+    },
+  ];
+
+  return (
+    <View style={[styles.container, themeStyles.container]}>
+      {navigationItems.map((item) => (
+        <TouchableOpacity
+          key={item.name}
+          style={[
+            styles.navItem,
+            item.special && styles.specialNavItem,
+            currentRoute === item.name && styles.activeNavItem,
+          ]}
+          onPress={() => navigation.navigate(item.name)}
+          activeOpacity={0.7}
+        >
+          {item.icon(currentRoute === item.name)}
+          {!item.special && (
+            <Text
+              style={[
+                styles.navLabel,
+                themeStyles.navLabel,
+                currentRoute === item.name && styles.activeNavLabel,
+                currentRoute === item.name && themeStyles.activeNavLabel,
+              ]}
+            >
+              {item.label}
+            </Text>
+          )}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
 const styles = StyleSheet.create({
-  bottomNavigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 15,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    position: 'absolute',
+  container: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
+    height: 60,
   },
   navItem: {
-    alignItems: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    width: width / 5,
   },
-  navIcon: {
-    width: 24,
-    height: 24,
-    tintColor: '#FFF',
+  specialNavItem: {
+    marginBottom: 20,
   },
-  navText: {
+  activeNavItem: {
+    // Active styles applied through text and icon colors
+  },
+  navLabel: {
     fontSize: 12,
-    color: '#FFF',
+    marginTop: 4,
   },
-  navTextActive: {
-    fontSize: 12,
-    color: '#FFF',
-    fontWeight: '700',
+  activeNavLabel: {
+    fontWeight: "600",
+    color: "#0e135f",
+  },
+  addButtonContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 5,
   },
 });
+
+// Define theme-specific styles
+const lightStyles = {
+  container: {
+    backgroundColor: "#FFFFFF",
+    borderTopColor: "#EEEEEE",
+  },
+  navLabel: {
+    color: "#757575",
+  },
+  activeNavLabel: {
+    color: "#0e135f",
+  },
+  addButtonContainer: {
+    backgroundColor: "#0e135f",
+  },
+  addButtonIconColor: "#FFFFFF" as ColorValue,
+  iconColor: "#757575" as ColorValue,
+};
+
+const darkStyles = {
+  container: {
+    backgroundColor: "#1E1E1E",
+    borderTopColor: "#333333",
+  },
+  navLabel: {
+    color: "#AAAAAA",
+  },
+  activeNavLabel: {
+    color: "#B388FF",
+  },
+  addButtonContainer: {
+    backgroundColor: "#B388FF",
+  },
+  addButtonIconColor: "#1E1E1E" as ColorValue,
+  iconColor: "#AAAAAA" as ColorValue,
+};
 
 export default Footer;
