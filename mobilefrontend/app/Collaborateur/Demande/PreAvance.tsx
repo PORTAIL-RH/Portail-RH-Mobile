@@ -1,330 +1,846 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  FlatList,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  useColorScheme,
   Modal,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import SidebarLayout from './SidebarLayout';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_CONFIG } from '../../config';
-import Toast from 'react-native-toast-message';
+  FlatList,
+  Platform,
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import * as DocumentPicker from "expo-document-picker";
+import {
+  FileText,
+  Send,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  DollarSign,
+  ChevronDown,
+  Search,
+  Paperclip,
+} from "lucide-react-native";
+import Footer from "../../Components/Footer";
+import { API_CONFIG } from "../../config/apiConfig";
+import SidebarLayout from "./SidebarLayout";
 
-const DemandePretAvance = () => {
-  const [texteDemande, setTexteDemande] = useState('');
-  const [matPersId, setMatPersId] = useState('');
-  const [typeAvance, setTypeAvance] = useState('');
-  const [montant, setMontant] = useState('');
+// Define the navigation stack types
+export type RootStackParamList = {
+  AccueilCollaborateur: undefined;
+  Profile: undefined;
+  Demandestot: undefined;
+  Authentification: undefined;
+  Notifications: undefined;
+  Autorisation: undefined;
+  AjouterDemande: undefined;
+  PretAvance: undefined;
+};
+
+// Define the navigation prop type
+type PretAvanceNavigationProp = NativeStackNavigationProp<RootStackParamList, "PretAvance">;
+
+// Define the type for the file state
+type DocumentPickerAsset = {
+  uri: string;
+  name: string;
+  mimeType?: string;
+};
+
+const PretAvancePage = () => {
+  const navigation = useNavigation<PretAvanceNavigationProp>();
+  const systemColorScheme = useColorScheme();
+  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark");
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<"success" | "error">("success");
+
+  // Form state
+  const [typeAvance, setTypeAvance] = useState("");
+  const [montant, setMontant] = useState("");
+  const [montantMax, setMontantMax] = useState("");
+  const [matPersId, setMatPersId] = useState("");
   const [typesAvance, setTypesAvance] = useState<[string, unknown][]>([]);
-  const [montantMax, setMontantMax] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredTypes, setFilteredTypes] = useState<[string, unknown][]>([]);
+  const [file, setFile] = useState<DocumentPickerAsset | null>(null); // File state
+
+  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
-    Toast.show({
-      type,
-      text1: type === 'success' ? 'Success' : 'Error',
-      text2: message,
-    });
-  };
-
+  // Load theme preference and fetch data on component mount
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      const userInfoString = await AsyncStorage.getItem('userInfo');
-      if (userInfoString) {
-        const userInfo = JSON.parse(userInfoString);
-        setMatPersId(userInfo.id || '');
-      }
+    const loadData = async () => {
+      await loadThemePreference();
+      await fetchUserInfo();
+      await fetchTypesAvance();
     };
-
-    const fetchTypesAvance = async () => {
-      try {
-        const token = await AsyncStorage.getItem('userToken');
-        const response = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-pre-avance/types`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        setTypesAvance(Object.entries(response.data));
-      } catch (error) {
-        console.error('Error fetching types of advances:', error);
-      }
-    };
-
-    fetchUserInfo();
-    fetchTypesAvance();
+    loadData();
   }, []);
 
-  const validateForm = () => {
-    if (!matPersId.trim()) {
-      showToast('error', 'L\'ID personnel est requis.');
-      return false;
+  // Load theme preference from AsyncStorage
+  const loadThemePreference = async () => {
+    try {
+      const storedTheme = await AsyncStorage.getItem("@theme_mode");
+      if (storedTheme !== null) {
+        setIsDarkMode(storedTheme === "dark");
+      }
+    } catch (error) {
+      console.error("Error loading theme preference:", error);
     }
-    if (!typeAvance.trim()) {
-      showToast('error', 'Le type d\'avance est requis.');
-      return false;
-    }
-    if (!montant.trim() || isNaN(Number(montant))) {
-      showToast('error', 'Le montant doit être un nombre valide.');
-      return false;
-    }
-    if (Number(montant) > Number(montantMax)) {
-      showToast('error', `Le montant ne doit pas dépasser ${montantMax} € pour ce type d'avance.`);
-      return false;
-    }
-    return true;
   };
 
-  const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
+  // Fetch user info from AsyncStorage
+  const fetchUserInfo = async () => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
+      const userInfoString = await AsyncStorage.getItem("userInfo");
+      if (userInfoString) {
+        const userInfo = JSON.parse(userInfoString);
+        setMatPersId(userInfo.id || "");
+      }
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+    }
+  };
+
+  // Fetch available advance types from API
+  const fetchTypesAvance = async () => {
+    setLoading(true);
+    try {
+      const token = await AsyncStorage.getItem("userToken");
       if (!token) {
-        showToast('error', 'Vous devez être connecté pour soumettre une demande.');
+        displayToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.");
         return;
       }
 
-      // Prepare the form data
-      const formData = {
-        typeDemande: typeAvance,
-        montant: Number(montant),
-        matPers: {
-          id: matPersId, // Send only the id if the backend can handle it
+      const response = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-pre-avance/types`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      };
+      });
 
-      console.log('Submitting form data:', formData);
+      const types = Object.entries(response.data);
+      setTypesAvance(types);
+      setFilteredTypes(types);
+    } catch (error) {
+      console.error("Error fetching types of advances:", error);
+      displayToast("error", "Erreur lors de la récupération des types d'avance. Veuillez réessayer.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Toggle theme between light and dark mode
+  const toggleTheme = async () => {
+    const newTheme = isDarkMode ? "light" : "dark";
+    setIsDarkMode(!isDarkMode);
+    try {
+      await AsyncStorage.setItem("@theme_mode", newTheme);
+    } catch (error) {
+      console.error("Error saving theme preference:", error);
+    }
+  };
+
+  // Apply theme styles
+  const themeStyles = isDarkMode ? darkStyles : lightStyles;
+
+  // Open modal for type selection
+  const openModal = () => {
+    setSearchQuery("");
+    setFilteredTypes(typesAvance);
+    setModalVisible(true);
+  };
+
+  // Filter types in modal
+  const filterTypes = (query: string) => {
+    setSearchQuery(query);
+
+    if (query.trim() === "") {
+      setFilteredTypes(typesAvance);
+    } else {
+      const filtered = typesAvance.filter(([type]) => type.toLowerCase().includes(query.toLowerCase()));
+      setFilteredTypes(filtered);
+    }
+  };
+
+  // Handle type selection
+  const handleSelectType = (type: string, max: unknown) => {
+    setTypeAvance(type);
+    setMontantMax(String(max));
+    setModalVisible(false);
+  };
+
+  // Handle file upload
+  const handleFileUpload = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*", // Allow all file types
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedFile = result.assets[0];
+        setFile(selectedFile);
+        displayToast("success", `Fichier "${selectedFile.name}" sélectionné`);
+      } else {
+        console.log("File selection cancelled by the user.");
+      }
+    } catch (err) {
+      console.error("Error picking file:", err);
+      displayToast("error", "Une erreur est survenue lors de la sélection du fichier.");
+    }
+  };
+
+  // Remove file
+  const removeFile = () => {
+    setFile(null);
+  };
+
+  // Display toast message
+  const displayToast = (type: "success" | "error", message: string) => {
+    console.log(`Displaying toast: type=${type}, message=${message}`); // Debug log
+    setToastType(type);
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => {
+      console.log("Hiding toast"); // Debug log
+      setShowToast(false);
+    }, 5000); // Increased timeout to 5 seconds
+  };
+
+  // Validate form
+  const validateForm = () => {
+    if (!typeAvance.trim()) {
+      displayToast("error", "Veuillez sélectionner un type d'avance.");
+      return false;
+    }
+
+    if (!montant.trim() || isNaN(Number(montant))) {
+      displayToast("error", "Veuillez entrer un montant valide.");
+      return false;
+    }
+
+    if (Number(montant) <= 0) {
+      displayToast("error", "Le montant doit être supérieur à 0.");
+      return false;
+    }
+
+    if (Number(montant) > Number(montantMax)) {
+      displayToast("error", `Le montant ne doit pas dépasser ${montantMax} € pour ce type d'avance.`);
+      return false;
+    }
+
+    if (!matPersId) {
+      displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
+      return false;
+    }
+
+    return true;
+  };
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    console.log("Form submitted"); // Debug log
+    if (!validateForm()) {
+      console.log("Form validation failed"); // Debug log
+      return;
+    }
+  
+    setSubmitting(true);
+  
+    try {
+      console.log("Submitting form..."); // Debug log
+      const token = await AsyncStorage.getItem("userToken");
+      if (!token) {
+        displayToast("error", "Vous devez être connecté pour soumettre une demande.");
+        setSubmitting(false);
+        return;
+      }
+  
+      // Fetch user info to get `codeSoc`
+      const userInfoString = await AsyncStorage.getItem("userInfo");
+      if (!userInfoString) {
+        displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
+        setSubmitting(false);
+        return;
+      }
+      const userInfo = JSON.parse(userInfoString);
+      const codeSoc = userInfo.code_soc; // Ensure this matches the key in your userInfo object
+  
+      // Prepare form data
+      const formData = new FormData();
+      formData.append("type", typeAvance); // Use "type" instead of "typeDemande"
+      formData.append("montant", montant.toString()); // Convert montant to string
+      formData.append("texteDemande", "Demande de prêt/avance"); // Add a default or dynamic value
+      formData.append("matPersId", matPersId); // Use "matPersId" instead of "matPers[id]"
+      formData.append("codeSoc", codeSoc); // Add codeSoc
+  
+      // Append the file if it exists
+      if (file) {
+        const fileUri = Platform.OS === "android" ? file.uri : file.uri.replace("file://", "");
+        formData.append("file", {
+          uri: fileUri,
+          name: file.name,
+          type: file.mimeType || "application/octet-stream",
+        } as any);
+      }
+  
       // Submit the form
       const response = await axios.post(
         `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-pre-avance/create`,
         formData,
         {
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
-
-      console.log('Response from backend:', response.data);
-
+  
+      // Handle successful response
       if (response.status === 200) {
-        showToast('success', 'Demande soumise avec succès!');
-        // Reset form fields after successful submission
-        setTypeAvance('');
-        setMontant('');
-        setMontantMax('');
+        displayToast("success", "Demande soumise avec succès !");
+  
+        // Reset form fields
+        setTypeAvance("");
+        setMontant("");
+        setMontantMax("");
+        setFile(null);
+  
+        // Delay navigation to ensure the toast is displayed
+        setTimeout(() => {
+          navigation.navigate("AccueilCollaborateur");
+        }, 5000); // 5 seconds delay
       }
     } catch (error) {
+      console.error("Erreur lors de la soumission du formulaire :", error);
       if (axios.isAxiosError(error)) {
-        console.error('Error Response:', error.response?.data);
-        showToast('error', error.response?.data?.message || 'Une erreur est survenue lors de l\'envoi de la demande.');
+        console.error("Réponse d'erreur :", error.response?.data);
+        displayToast("error", error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
       } else if (error instanceof Error) {
-        showToast('error', error.message);
+        displayToast("error", error.message);
       } else {
-        showToast('error', 'Une erreur inconnue est survenue.');
+        displayToast("error", "Une erreur inconnue est survenue.");
       }
+    } finally {
+      console.log("Form submission complete"); // Debug log
+      setSubmitting(false);
     }
   };
-
-  const renderTypeItem = ({ item }: { item: [string, unknown] }) => (
-    <TouchableOpacity
-      style={[styles.typeCard, typeAvance === item[0] && styles.selectedTypeCard]}
-      onPress={() => {
-        setTypeAvance(item[0]);
-        setMontantMax(String(item[1])); // Set the max amount for selected type
-        setModalVisible(false);
-      }}
-    >
-      <Text style={styles.typeText}>{item[0]}</Text>
-    </TouchableOpacity>
-  );
-
   return (
-    <SidebarLayout>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
+    <SidebarLayout title="Demande de prêt/avance">
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={styles.header}>
-            <Icon name="assignment-add" size={24} color="#0e135f" />
-            <Text style={styles.title}>Ajouter une Demande de Pre-Avance</Text>
+        {/* Form Header */}
+        <View style={[styles.formHeader, themeStyles.card]}>
+          <View style={styles.formHeaderIcon}>
+            <DollarSign size={24} color={isDarkMode ? "#0e135f" : "#0e135f"} />
           </View>
-
-          <Text style={styles.label}>Type</Text>
-          <TouchableOpacity
-            onPress={() => setModalVisible(true)}
-          >
-            <Text style={styles.input}>
-              {typeAvance ? typeAvance : "Sélectionner un type d'avance"}
+          <View style={styles.formHeaderContent}>
+            <Text style={[styles.formHeaderTitle, themeStyles.text]}>Nouvelle demande de prêt/avance</Text>
+            <Text style={[styles.formHeaderSubtitle, themeStyles.subtleText]}>
+              Remplissez le formulaire ci-dessous pour soumettre votre demande
             </Text>
-          </TouchableOpacity>
+          </View>
+        </View>
 
-          <Text style={styles.label}>Montant</Text>
-          <View style={styles.montantContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Entrez le montant"
-              value={montant}
-              onChangeText={setMontant}
-              keyboardType="numeric"
-            />
-            {montantMax ? (
-              <Text style={styles.maxMontantText}>Max: {montantMax} €</Text>
-            ) : null}
+        {/* Form */}
+        <View style={[styles.formContainer, themeStyles.card]}>
+          {/* Type d'avance */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, themeStyles.text]}>
+              Type d'avance <Text style={styles.required}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[styles.inputContainer, themeStyles.inputContainer]}
+              onPress={openModal}
+              disabled={loading}
+            >
+              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Text style={[styles.inputText, themeStyles.text]}>
+                {typeAvance ? typeAvance : "Sélectionner un type d'avance"}
+              </Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#0e135f" style={styles.dropdownIcon} />
+              ) : (
+                <ChevronDown size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} style={styles.dropdownIcon} />
+              )}
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-            <Icon name="send" size={20} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Soumettre</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {/* Montant */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, themeStyles.text]}>
+              Montant <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={[styles.inputContainer, themeStyles.inputContainer]}>
+              <DollarSign size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.inputText, themeStyles.text]}
+                placeholder="Entrez le montant"
+                placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
+                value={montant}
+                onChangeText={setMontant}
+                keyboardType="numeric"
+              />
+            </View>
+            {montantMax && (
+              <Text style={[styles.montantMaxText, themeStyles.subtleText]}>Montant maximum: {montantMax} €</Text>
+            )}
+          </View>
 
+          {/* Pièce jointe */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, themeStyles.text]}>Pièce jointe (optionnel)</Text>
+            <TouchableOpacity style={[styles.inputContainer, themeStyles.inputContainer]} onPress={handleFileUpload}>
+              <Paperclip size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Text style={[styles.inputText, themeStyles.subtleText]}>
+                {file ? file.name : "Sélectionner un fichier"}
+              </Text>
+            </TouchableOpacity>
+            {file && (
+              <View style={styles.fileInfo}>
+                <FileText size={16} color={isDarkMode ? "#0e135f" : "#0e135f"} />
+                <Text style={[styles.fileName, themeStyles.subtleText]} numberOfLines={1} ellipsizeMode="middle">
+                  {file.name}
+                </Text>
+                <TouchableOpacity style={styles.removeFile} onPress={removeFile}>
+                  <XCircle size={16} color={isDarkMode ? "#E0E0E0" : "#757575"} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Note */}
+          <View style={[styles.noteContainer, themeStyles.noteContainer]}>
+            <AlertTriangle size={16} color={isDarkMode ? "#FFC107" : "#FFC107"} />
+            <Text style={[styles.noteText, themeStyles.subtleText]}>
+              Les champs marqués d'un astérisque (*) sont obligatoires
+            </Text>
+          </View>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Send size={20} color="#FFFFFF" style={styles.submitButtonIcon} />
+                <Text style={styles.submitButtonText}>Soumettre la demande</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+        </View>
+      </ScrollView>
+
+      {/* Selection Modal */}
       <Modal
         visible={modalVisible}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <FlatList
-              data={typesAvance}
-              keyExtractor={(item) => item[0]}
-              renderItem={renderTypeItem}
-            />
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setModalVisible(false)}
-            >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, themeStyles.card]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, themeStyles.text]}>Sélectionner un type d'avance</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <XCircle size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.searchContainer, themeStyles.inputContainer]}>
+              <Search size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, themeStyles.text]}
+                placeholder="Rechercher..."
+                placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
+                value={searchQuery}
+                onChangeText={filterTypes}
+              />
+            </View>
+
+            {loading ? (
+              <View style={styles.modalLoadingContainer}>
+                <ActivityIndicator size="large" color="#0e135f" />
+              </View>
+            ) : filteredTypes.length === 0 ? (
+              <View style={styles.modalEmptyContainer}>
+                <Text style={[styles.modalEmptyText, themeStyles.subtleText]}>Aucun résultat trouvé</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredTypes}
+                keyExtractor={(item) => item[0]}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.modalItem, themeStyles.modalItem]}
+                    onPress={() => handleSelectType(item[0], item[1])}
+                  >
+                    <View style={styles.modalItemContent}>
+                      <Text style={[styles.modalItemText, themeStyles.text]}>{item[0]}</Text>
+                      <Text style={[styles.modalItemSubtext, themeStyles.subtleText]}>Max: {String(item[1])} €</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={styles.modalList}
+              />
+            )}
+
+            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
               <Text style={styles.modalCloseButtonText}>Fermer</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Toast />
+      {/* Toast Message */}
+      {showToast && (
+        <View
+          style={[
+            styles.toast,
+            toastType === "success" ? styles.toastSuccess : styles.toastError,
+            { bottom: 70 }, // Position above footer
+          ]}
+        >
+          {toastType === "success" ? <CheckCircle size={20} color="#FFFFFF" /> : <XCircle size={20} color="#FFFFFF" />}
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      )}
+
+      {/* Footer */}
+      <Footer />
     </SidebarLayout>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+  scrollContainer: {
+    flex: 1,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginLeft: 8,
-    color: '#0e135f',
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  formHeaderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(147, 112, 219, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  formHeaderContent: {
+    flex: 1,
+  },
+  formHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  formHeaderSubtitle: {
+    fontSize: 14,
+  },
+  formContainer: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  formGroup: {
+    marginBottom: 16,
   },
   label: {
     fontSize: 16,
-    marginBottom: 10,
+    fontWeight: "500",
+    marginBottom: 8,
   },
-  input: {
+  required: {
+    color: "#F44336",
+  },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 15,
+    paddingHorizontal: 12,
+    height: 48,
   },
-  textArea: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 15,
+  inputIcon: {
+    marginRight: 12,
   },
-  button: {
-    backgroundColor: '#0e135f',
+  inputText: {
+    flex: 1,
+    fontSize: 16,
+  },
+  dropdownIcon: {
+    marginLeft: 8,
+  },
+  montantMaxText: {
+    fontSize: 14,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  fileInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  fileName: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  removeFile: {
+    marginLeft: 8,
+  },
+  noteContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
     borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  noteText: {
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0e135f",
+    borderRadius: 8,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  submitButtonDisabled: {
+    backgroundColor: "#0e135f80",
+  },
+  submitButtonIcon: {
+    marginRight: 8,
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  testButton: {
+    backgroundColor: "#0e135f",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
     marginTop: 20,
   },
-  buttonIcon: {
-    marginRight: 10,
-  },
-  buttonText: {
-    color: '#fff',
+  testButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
+    fontWeight: "600",
   },
-  typeCard: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    backgroundColor: '#f9f9f9',
-  },
-  selectedTypeCard: {
-    backgroundColor: '#e0e0e0',
-  },
-  typeText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0e135f',
-  },
-  montantText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  montantContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  maxMontantText: {
-    marginLeft: 10,
-    fontSize: 14,
-    color: '#666',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    width: "90%",
+    maxHeight: "80%",
+    borderRadius: 12,
+    padding: 16,
   },
-  modalContent: {
-    width: '80%',
-    backgroundColor: 'white',
-    borderRadius: 10,
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    height: 40,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+  },
+  modalList: {
+    paddingBottom: 16,
+  },
+  modalItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  modalItemContent: {
+    flexDirection: "column",
+  },
+  modalItemText: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  modalItemSubtext: {
+    fontSize: 14,
+  },
+  modalLoadingContainer: {
     padding: 20,
+    alignItems: "center",
+  },
+  modalEmptyContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  modalEmptyText: {
+    fontSize: 16,
   },
   modalCloseButton: {
-    marginTop: 10,
-    backgroundColor: '#0e135f',
-    padding: 10,
+    backgroundColor: "#0e135f",
     borderRadius: 8,
-    alignItems: 'center',
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 16,
   },
   modalCloseButtonText: {
-    color: '#fff',
+    color: "#FFFFFF",
     fontSize: 16,
+    fontWeight: "600",
+  },
+  toast: {
+    position: "absolute",
+    bottom: 70, // Position above footer
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1000, // Ensure the toast is above other components
+  },
+  toastSuccess: {
+    backgroundColor: "#4CAF50",
+  },
+  toastError: {
+    backgroundColor: "#F44336",
+  },
+  toastText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+    marginLeft: 8,
+    flex: 1,
   },
 });
 
-export default DemandePretAvance;
+// Theme-specific styles
+const lightStyles = StyleSheet.create({
+  container: {
+    backgroundColor: "#F5F5F5",
+  },
+  header: {
+    backgroundColor: "#FFFFFF",
+    borderBottomColor: "#EEEEEE",
+  },
+  text: {
+    color: "#333333",
+  },
+  subtleText: {
+    color: "#757575",
+  },
+  disabledText: {
+    color: "#AAAAAA",
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  inputContainer: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#EEEEEE",
+  },
+  noteContainer: {
+    backgroundColor: "rgba(255, 193, 7, 0.1)",
+  },
+  modalItem: {
+    borderBottomColor: "#EEEEEE",
+  },
+});
+
+const darkStyles = StyleSheet.create({
+  container: {
+    backgroundColor: "#121212",
+  },
+  header: {
+    backgroundColor: "#1E1E1E",
+    borderBottomColor: "#333333",
+  },
+  text: {
+    color: "#E0E0E0",
+  },
+  subtleText: {
+    color: "#AAAAAA",
+  },
+  disabledText: {
+    color: "#666666",
+  },
+  card: {
+    backgroundColor: "#1E1E1E",
+    borderColor: "#333333",
+    borderWidth: 1,
+    shadowColor: "transparent",
+  },
+  inputContainer: {
+    backgroundColor: "#1E1E1E",
+    borderColor: "#333333",
+  },
+  noteContainer: {
+    backgroundColor: "rgba(255, 193, 7, 0.05)",
+  },
+  modalItem: {
+    borderBottomColor: "#333333",
+  },
+});
+
+export default PretAvancePage;

@@ -5,7 +5,8 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
-import { API_CONFIG } from '../config';
+import { API_CONFIG } from '../config/apiConfig';
+
 // Define the navigation stack types
 type AuthentificationStackParamList = {
   Authentification: undefined;
@@ -22,7 +23,8 @@ type AuthentificationNavigationProp = NativeStackNavigationProp<
 const Authentication = () => {
   const navigation = useNavigation<AuthentificationNavigationProp>();
   const [action, setAction] = useState<"Login" | "Sign up">("Login");
-  const [username, setUsername] = useState("");
+  const [nom, setNom] = useState(""); // Last name
+  const [prenom, setPrenom] = useState(""); // First name
   const [email, setEmail] = useState("");
   const [matricule, setMatricule] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +39,7 @@ const Authentication = () => {
   };
 
   const handleSignUp = async () => {
-    if (!username || !matricule || !email || !password || !confirmPassword) {
+    if (!nom || !prenom || !matricule || !email || !password || !confirmPassword) {
       showToast("error", "Please fill in all fields");
       return;
     }
@@ -49,7 +51,8 @@ const Authentication = () => {
 
     try {
       const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/register`, {
-        nom: username,
+        nom, // Last name
+        prenom, // First name
         matricule,
         email,
         motDePasse: password,
@@ -60,10 +63,10 @@ const Authentication = () => {
         Toast.show({
           type: 'success',
           text1: 'Success',
-          text2: 'signup successful 👏',
-          position: 'bottom', 
+          text2: 'Signup successful 👏',
+          position: 'bottom',
         });
-                setAction("Login"); 
+        setAction("Login");
       }
     } catch (error) {
       console.error("Error signing up:", error);
@@ -77,18 +80,44 @@ const Authentication = () => {
         matricule,
         motDePasse: password,
       });
-
+  
       if (response.status === 200) {
-        const { token, id, role } = response.data;
+        const { token, id } = response.data;
+  
+        // Fetch user details by ID
+        const userResponse = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${id}`);
+        const userData = userResponse.data;
+  
+        // Extract the role, codeSoc, and Service from the user data
+        const role = userData.role;
+        const codeSoc = userData.code_soc;
+        const Service = userData.serviceName;
+  
+        // Check if the role is defined
+        if (!role) {
+          console.error("Role is undefined in the user data");
+          showToast("error", "Role information is missing");
+          return;
+        }
+  
+        // Log the role and navigation details
+        console.log("Login successful, role:", role);
+        console.log("Navigating to:", role === "collaborateur" ? "AccueilCollaborateur" : "AdminDashboard");
+  
+        // Store token, user ID, user details, codeSoc, and Service in AsyncStorage
         await AsyncStorage.setItem("userToken", token);
-        await AsyncStorage.setItem("userInfo", JSON.stringify(response.data));
-
+        await AsyncStorage.setItem("userId", id);
+        await AsyncStorage.setItem("userInfo", JSON.stringify(userData));
+        await AsyncStorage.setItem("userCodeSoc", codeSoc); // Store codeSoc
+        await AsyncStorage.setItem("userService", Service); // Store Service
+  
         showToast("success", "Login successful");
-
-        if (role === "admin") {
-          navigation.navigate("AdminDashboard");
-        } else {
+  
+        // Navigate based on role
+        if (role === "collaborateur") {
           navigation.navigate("AccueilCollaborateur");
+        } else if (role === "admin" || role === "superviseur") {
+          navigation.navigate("AdminDashboard");
         }
       }
     } catch (error) {
@@ -99,7 +128,7 @@ const Authentication = () => {
 
   return (
     <View style={styles.container}>
-      <Toast /> 
+      <Toast />
       <View style={styles.header}>
         <Text style={styles.text}>{action}</Text>
         <View style={styles.underline} />
@@ -110,29 +139,73 @@ const Authentication = () => {
 
       <View style={styles.inputs}>
         {action === "Sign up" && (
-          <View style={styles.input}>
-            <Image source={require("../../assets/images/profil.png")} style={styles.img} />
-            <TextInput style={styles.inputField} placeholder="Username" placeholderTextColor="#888" value={username} onChangeText={setUsername} />
-          </View>
+          <>
+            <View style={styles.input}>
+              <Image source={require("../../assets/images/profil.png")} style={styles.img} />
+              <TextInput
+                style={styles.inputField}
+                placeholder="Nom"
+                placeholderTextColor="#888"
+                value={nom}
+                onChangeText={setNom}
+              />
+            </View>
+            <View style={styles.input}>
+              <Image source={require("../../assets/images/profil.png")} style={styles.img} />
+              <TextInput
+                style={styles.inputField}
+                placeholder="Prénom"
+                placeholderTextColor="#888"
+                value={prenom}
+                onChangeText={setPrenom}
+              />
+            </View>
+          </>
         )}
         <View style={styles.input}>
           <Image source={require("../../assets/images/code.png")} style={styles.img} />
-          <TextInput style={styles.inputField} placeholder="Matricule" placeholderTextColor="#888" value={matricule} onChangeText={setMatricule} />
+          <TextInput
+            style={styles.inputField}
+            placeholder="Matricule"
+            placeholderTextColor="#888"
+            value={matricule}
+            onChangeText={setMatricule}
+          />
         </View>
         {action === "Sign up" && (
           <View style={styles.input}>
             <Image source={require("../../assets/images/mail.png")} style={styles.img} />
-            <TextInput style={styles.inputField} placeholder="Email" placeholderTextColor="#888" value={email} onChangeText={setEmail} />
+            <TextInput
+              style={styles.inputField}
+              placeholder="Email"
+              placeholderTextColor="#888"
+              value={email}
+              onChangeText={setEmail}
+            />
           </View>
         )}
         <View style={styles.input}>
           <Image source={require("../../assets/images/pwd.png")} style={styles.img} />
-          <TextInput style={styles.inputField} placeholder="Password" secureTextEntry placeholderTextColor="#888" value={password} onChangeText={setPassword} />
+          <TextInput
+            style={styles.inputField}
+            placeholder="Password"
+            secureTextEntry
+            placeholderTextColor="#888"
+            value={password}
+            onChangeText={setPassword}
+          />
         </View>
         {action === "Sign up" && (
           <View style={styles.input}>
             <Image source={require("../../assets/images/pwd.png")} style={styles.img} />
-            <TextInput style={styles.inputField} placeholder="Confirm Password" secureTextEntry placeholderTextColor="#888" value={confirmPassword} onChangeText={setConfirmPassword} />
+            <TextInput
+              style={styles.inputField}
+              placeholder="Confirm Password"
+              secureTextEntry
+              placeholderTextColor="#888"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
           </View>
         )}
       </View>
@@ -165,7 +238,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 20,
-    elevation: 5, // For Android
+    elevation: 5,
   },
   header: {
     alignItems: 'center',

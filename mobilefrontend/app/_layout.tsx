@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useContext } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import Toast, { BaseToast } from 'react-native-toast-message';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { API_CONFIG, setApiConfig } from './config'; // Import the config
+import { API_CONFIG, setApiConfig } from './config/apiConfig';
+import { ThemeProvider, useTheme } from "./ThemeContext"; // Import useTheme, remove ThemeContext
 
 // Importation des composants
 import Authentification from './Collaborateur/Authentification';
@@ -18,13 +19,14 @@ import Autorisation from './Collaborateur/Demande/Autorisation';
 import Document from './Collaborateur/Demande/Document';
 import Pret from './Collaborateur/Demande/PreAvance';
 import AjouterDemande from './Collaborateur/Demande/AjouterDemande';
+import Notifications from './Collaborateur/Notifications';
 
 import Conge from './Collaborateur/Demande/Conge';
 import Formation from './Collaborateur/Demande/Formation';
 import SidebarLayout from './Collaborateur/Demande/SidebarLayout';
 import AdminDashboard from './Admin/AdminDashboard';
 import AdminSideBar from './Admin/AdminSideBar';
-import Notifications from './Admin/Notifications';
+import Notificationsadmin from './Admin/Notifications';
 import Demandes from './Collaborateur/Demande/Demandes';
 import DemandesAdmin from './Admin/DemandesAdmin'
 import Personnel from './Admin/Personnel'
@@ -39,7 +41,6 @@ const Stack = createNativeStackNavigator();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-
   const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -74,77 +75,48 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Authentification" component={Authentification} options={{ title: 'Connexion' }} />
-          <Stack.Screen name="AccueilCollaborateur" component={AccueilCollaborateur} options={{ title: 'AccueilCollaborateur' }} />
-          <Stack.Screen name="Profile" component={Profile} options={{ title: 'Profil' }} />
-          <Stack.Screen name="Demande" component={Demande} options={{ title: 'Demandes' }} />
-          <Stack.Screen name="Demandestot" component={Demandes} options={{ title: 'Demandestot' }} />
-
-          <Stack.Screen name="Calendar" component={Calendar} options={{ title: 'Calendrier' }} />
-          <Stack.Screen name="Autorisation" component={Autorisation} options={{ title: 'Autorisation' }} />
-          <Stack.Screen name="Conge" component={Conge} options={{ title: 'Congés' }} />
-          <Stack.Screen name="Document" component={Document} options={{ title: 'Document' }} />
-          <Stack.Screen name="Pret" component={Pret} options={{ title: 'Pret' }} />
-          <Stack.Screen name="AjouterDemande" component={AjouterDemande} options={{ title: 'AjouterDemande' }} />
-
-          
-          <Stack.Screen name="Formation" component={Formation} options={{ title: 'Formation' }} />
-          <Stack.Screen name="SidebarLayout" component={SidebarLayout} options={{ title: 'Sidebar' }} />
-          <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ title: 'Tableau de Bord Admin' }} />
-          <Stack.Screen name="AdminSideBar" component={AdminSideBar} options={{ title: 'Sidebar Admin' }} />
-          <Stack.Screen name="Notifications" component={Notifications} options={{ title: 'Notifications' }} />
-          <Stack.Screen name="DemandesAdmin" component={DemandesAdmin} options={{ title: 'DemandesAdmin' }} />
-          <Stack.Screen name="Personnel" component={Personnel} options={{ title: 'Personnel' }} />
-
-        </Stack.Navigator>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      </ThemeProvider>
-
-      {/* Configuration de Toast */}
-      <Toast
-        config={{
-          success: (props) => (
-            <BaseToast
-              {...props}
-              style={{
-                borderLeftColor: "green",
-                position: "absolute", // Ensure position is absolute
-                bottom: 800,
-                right: 20,
-              }}
-              contentContainerStyle={{ paddingHorizontal: 15 }}
-              text1Style={{
-                fontSize: 16,
-                fontWeight: "bold",
-              }}
-              text2Style={{
-                fontSize: 14,
-              }}
-            />
-          ),
-          error: (props) => (
-            <BaseToast
-              {...props}
-              style={{
-                borderLeftColor: "red",
-                bottom: 800,
-                right: 20,
-              }}
-              contentContainerStyle={{ paddingHorizontal: 15 }}
-              text1Style={{
-                fontSize: 16,
-                fontWeight: "bold",
-              }}
-              text2Style={{
-                fontSize: 14,
-              }}
-            />
-          ),
-        }}
-      />
-    </>
+    <ThemeProvider>
+      <InnerRootLayout colorScheme={colorScheme} />
+    </ThemeProvider>
   );
+}
+
+function InnerRootLayout({ colorScheme }) {
+    const { isThemeLoaded } = useTheme();
+
+    return (
+        <>
+            {isThemeLoaded ? (
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="Authentification" component={Authentification} options={{ title: 'Connexion' }} />
+                    <Stack.Screen name="AccueilCollaborateur" component={AccueilCollaborateur} options={{ title: 'AccueilCollaborateur' }} />
+                    <Stack.Screen name="Profile" component={Profile} options={{ title: 'Profil' }} />
+                    <Stack.Screen name="Demande" component={Demande} options={{ title: 'Demandes' }} />
+                    <Stack.Screen name="Demandestot" component={Demandes} options={{ title: 'Demandestot' }} />
+
+                    <Stack.Screen name="Calendar" component={Calendar} options={{ title: 'Calendrier' }} />
+                    <Stack.Screen name="Autorisation" component={Autorisation} options={{ title: 'Autorisation' }} />
+                    <Stack.Screen name="Conge" component={Conge} options={{ title: 'Congés' }} />
+                    <Stack.Screen name="Document" component={Document} options={{ title: 'Document' }} />
+                    <Stack.Screen name="Pret" component={Pret} options={{ title: 'Pret' }} />
+                    <Stack.Screen name="AjouterDemande" component={AjouterDemande} options={{ title: 'AjouterDemande' }} />
+                    <Stack.Screen name="Notifications" component={Notifications} options={{ title: 'Notifications' }} />
+
+                    <Stack.Screen name="Formation" component={Formation} options={{ title: 'Formation' }} />
+                    <Stack.Screen name="SidebarLayout" component={SidebarLayout} options={{ title: 'Sidebar' }} />
+                    <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ title: 'Tableau de Bord Admin' }} />
+                    <Stack.Screen name="AdminSideBar" component={AdminSideBar} options={{ title: 'Sidebar Admin' }} />
+                    <Stack.Screen name="Notificationsadmin" component={Notificationsadmin} options={{ title: 'Notifications' }} />
+                    <Stack.Screen name="DemandesAdmin" component={DemandesAdmin} options={{ title: 'DemandesAdmin' }} />
+                    <Stack.Screen name="Personnel" component={Personnel} options={{ title: 'Personnel' }} />
+                </Stack.Navigator>
+            ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color="#0000ff" />
+                    <Text>Loading theme...</Text>
+                </View>
+            )}
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+        </>
+    );
 }
