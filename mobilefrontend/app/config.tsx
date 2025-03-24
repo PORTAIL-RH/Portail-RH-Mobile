@@ -7,4 +7,4 @@ export const API_CONFIG = {
   export const setApiConfig = (baseUrl: string, port: string) => {
     API_CONFIG.BASE_URL = baseUrl;
     API_CONFIG.PORT = port;
-  };
+  };   
