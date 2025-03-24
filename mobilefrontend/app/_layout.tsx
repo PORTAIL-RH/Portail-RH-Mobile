@@ -53,8 +53,7 @@ export default function RootLayout() {
 
   // Set the API configuration dynamically
   useEffect(() => {
-    setApiConfig("http://192.168.1.32", "8080");
-    console.log("API Config:", API_CONFIG.BASE_URL, API_CONFIG.PORT);
+    setApiConfig("http://192.168.1.50", "8080"); // Set your desired base URL and port here
   }, []);
 
   // Écran de chargement si les polices ne sont pas encore chargées
