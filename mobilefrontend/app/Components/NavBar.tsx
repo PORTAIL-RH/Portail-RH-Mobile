@@ -1,106 +1,129 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Bell, Moon, Sun, User, ArrowLeft, LogOut } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import Toast from "react-native-toast-message";
+import { View, Text, StyleSheet, TouchableOpacity,Image  } from "react-native"
+import { useNavigation } from "@react-navigation/native"
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import Toast from "react-native-toast-message"
+import useNotifications from "../Collaborateur/useNotifications"
+import { LinearGradient } from "expo-linear-gradient"
+import { Feather } from "@expo/vector-icons"
 
-// Define the navigation stack types
 export type RootStackParamList = {
-  AccueilCollaborateur: undefined;
-  Profile: undefined;
-  Notifications: undefined;
-  Authentification: undefined;
-};
+  AccueilCollaborateur: undefined
+  Profile: undefined
+  Notifications: undefined
+  Authentification: undefined
+}
 
 type NavBarProps = {
-  title?: string;
-  showBackButton?: boolean;
-  isDarkMode: boolean;
-  toggleTheme: () => void;
-  handleLogout: () => void;
-  pendingNotifications?: number;
-};
+  title?: string
+  showBackButton?: boolean
+  isDarkMode: boolean
+  toggleTheme: () => void
+  handleLogout: () => void
+}
 
-const NavBar = ({
-  title = "Portail RH",
-  showBackButton = false,
-  isDarkMode,
-  toggleTheme,
-  handleLogout,
-  pendingNotifications = 0,
-}: NavBarProps) => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+const NavBar = ({ showBackButton = false, isDarkMode, toggleTheme, handleLogout }: NavBarProps) => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { unviewedCount , markAllAsRead } = useNotifications()
+
+  const handleNotificationPress = () => {
+    if (unviewedCount > 0) {
+      markAllAsRead() // Mark all as read first
+    }
+    navigation.navigate("Notifications") // Then navigate
+  }
 
   const handleLogoutPress = async () => {
     try {
-      // Clear user data from AsyncStorage
-      await AsyncStorage.removeItem("userToken");
-      await AsyncStorage.removeItem("userId");
-      await AsyncStorage.removeItem("userInfo");
-      await AsyncStorage.removeItem("userCodeSoc");
-      await AsyncStorage.removeItem("userService");
-      await AsyncStorage.removeItem("@theme_mode");
+      await AsyncStorage.removeItem("userToken")
+      await AsyncStorage.removeItem("userId")
+      await AsyncStorage.removeItem("userInfo")
+      await AsyncStorage.removeItem("userCodeSoc")
+      await AsyncStorage.removeItem("userService")
+      await AsyncStorage.removeItem("theme")
 
-      // Show a success toast message
       Toast.show({
         type: "success",
         text1: "Logged Out",
         text2: "You have been logged out successfully.",
-      });
+      })
 
-      // Navigate to the Authentication screen
-      navigation.navigate("Authentification");
+      navigation.navigate("Authentification")
     } catch (error) {
-      console.error("Error logging out:", error);
+      console.error("Error logging out:", error)
       Toast.show({
         type: "error",
         text1: "Error",
         text2: "Failed to log out. Please try again.",
-      });
+      })
     }
-  };
+  }
 
   return (
-    <View style={[styles.header, isDarkMode ? darkStyles.header : lightStyles.header]}>
+    <LinearGradient
+      colors={isDarkMode ? ["#1a1f38", "#2d3a65"] : ["#f0f4f8", "#e2eaf2"]}
+      start={{ x: 0.1, y: 0.1 }}
+      end={{ x: 0.9, y: 0.9 }}
+      style={styles.header}
+    >
       <View style={styles.headerLeft}>
         {showBackButton ? (
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
+            <Feather name="arrow-left" size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
           </TouchableOpacity>
-        ) : null}
-        {/* Replace the title with the logo image */}
-        <Image
-          source={require("../../assets/images/logo.png")} // Path to your logo image
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        ) : (
+          <View style={styles.branding}>
+            <Image
+              source={require("../../assets/images/logo.png")}
+              style={[
+                styles.logo,
+                isDarkMode && { tintColor: "white" }, // Only apply white tint in dark mode
+                ]}              
+                resizeMode="contain"
+              />
+          </View>
+          
+        )}
       </View>
 
       <View style={styles.headerRight}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate("Notifications")}>
-          <Bell size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
-          {pendingNotifications > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{pendingNotifications}</Text>
-            </View>
-          )}
+        <TouchableOpacity style={styles.iconButton} onPress={handleNotificationPress}>
+          <View style={[styles.iconButtonInner, isDarkMode ? styles.iconButtonInnerDark : styles.iconButtonInnerLight]}>
+            <Feather name="bell" size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
+            {unviewedCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unviewedCount > 9 ? "9+" : unviewedCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.iconButton} onPress={toggleTheme}>
-          {isDarkMode ? <Sun size={22} color="#E0E0E0" /> : <Moon size={22} color="#333" />}
+          <View style={[styles.iconButtonInner, isDarkMode ? styles.iconButtonInnerDark : styles.iconButtonInnerLight]}>
+            {isDarkMode ? (
+              <Feather name="sun" size={22} color="#E0E0E0" />
+            ) : (
+              <Feather name="moon" size={22} color="#333" />
+            )}
+          </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.logoutButton, isDarkMode ? darkStyles.logoutButton : lightStyles.logoutButton]}
-          onPress={handleLogoutPress}
-        >
-          <LogOut size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
+      
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogoutPress}>
+          <LinearGradient
+            colors={["rgba(244, 67, 54, 0.8)", "rgba(229, 57, 53, 0.8)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.logoutGradient}
+          >
+            <Feather name="log-out" size={20} color="#FFFFFF" />
+          </LinearGradient>
+          
         </TouchableOpacity>
       </View>
-    </View>
-  );
-};
+    </LinearGradient>
+  )
+}
 
 const styles = StyleSheet.create({
   header: {
@@ -108,8 +131,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 40, // More space for status bar
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 10,
+  },
+  logo: {
+    width: 150, // Adjust the width as needed
+    height: 40, // Adjust the height as needed
   },
   headerLeft: {
     flexDirection: "row",
@@ -117,30 +152,49 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
+  branding: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  logo: {
-    width: 150, // Adjust the width as needed
-    height: 40, // Adjust the height as needed
+  brandingIcon: {
+    marginRight: 8,
+    textShadowColor: "rgba(56, 189, 248, 0.5)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+
+  gradientText: {
+    textShadowColor: "rgba(56, 189, 248, 0.5)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
   },
   iconButton: {
-    padding: 8,
-    borderRadius: 20,
     marginLeft: 8,
     position: "relative",
   },
-  profileButton: {
-    padding: 8,
+  iconButtonInner: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    marginLeft: 8,
-    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconButtonInnerLight: {
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+  },
+  iconButtonInnerDark: {
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
   badge: {
     position: "absolute",
@@ -159,46 +213,26 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   logoutButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
     borderRadius: 20,
     marginLeft: 8,
-    borderWidth: 1,
-    backgroundColor: "rgba(255, 82, 82, 0.1)",
+    overflow: "hidden",
   },
-});
+  logoutGradient: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textLight: {
+    color: "white",
+  },
+  textDark: {
+    color: "#1a1f38",
+  },
+})
 
-const lightStyles = StyleSheet.create({
-  header: {
-    backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
-  },
-  text: {
-    color: "#333333",
-  },
-  profileButton: {
-    borderColor: "#ddd",
-  },
-  logoutButton: {
-    borderColor: "#ffdddd",
-    backgroundColor: "rgba(255, 82, 82, 0.05)",
-  },
-});
+export default NavBar
 
-const darkStyles = StyleSheet.create({
-  header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
-  },
-  text: {
-    color: "#E0E0E0",
-  },
-  profileButton: {
-    borderColor: "#444",
-  },
-  logoutButton: {
-    borderColor: "#662222",
-    backgroundColor: "rgba(255, 82, 82, 0.1)",
-  },
-});
-
-export default NavBar;

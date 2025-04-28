@@ -1,3 +1,4 @@
+import { TouchableOpacity } from "react-native";
 import { useTheme } from "./ThemeContext";
 
 const ThemeToggleButton = () => {
@@ -9,3 +10,4 @@ const ThemeToggleButton = () => {
     </TouchableOpacity>
   );
 };
+export default ThemeToggleButton;

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react"
+import type React from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   SafeAreaView,
   useColorScheme,
@@ -10,16 +10,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  RefreshControl,
 } from "react-native"
 import { useNavigation, type NavigationProp } from "@react-navigation/native"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import {
   Mail,
   Phone,
-  MapPin,
   Calendar,
-  Briefcase,
-  Edit,
   ChevronRight,
   User,
   FileText,
@@ -29,12 +27,12 @@ import {
   Sun,
   Shield,
   Building,
-  GraduationCap,
-  Bookmark,
+  IdCard,
+  Heart,
+  Users,
 } from "lucide-react-native"
 import Navbar from "../Components/NavBar"
 import Footer from "../Components/Footer"
-import { API_CONFIG } from "../config/apiConfig"
 
 type RootStackParamList = {
   AccueilCollaborateur: undefined
@@ -47,7 +45,6 @@ type RootStackParamList = {
 
 const { width } = Dimensions.get("window")
 
-// Définir les types pour les props
 interface InfoItemProps {
   icon: React.ReactNode
   label: string
@@ -60,115 +57,148 @@ interface ActionButtonProps {
   onPress: () => void
 }
 
+interface UserProfileData {
+  profileImage: string | null
+  nom: string | null
+  prenom: string | null
+  role: string | null
+  email: string | null
+  phone: string | null
+  address: string | null
+  serviceName: string | null
+  joinDate: string | null
+  position: string | null
+  education: string | null
+  skills: string | null
+  matricule: string | null
+  chefHierarchique: string
+  sexe: string | null
+  code_soc: string | null
+  cin: string | null
+  nbr_enfants: string | null
+  situation: string | null
+  date_naiss: string | null
+  active: boolean
+}
+
 const ProfilePage = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>()
-  const [userInfo, setUserInfo] = useState<any>({
-    profileImage: "https://randomuser.me/api/portraits/men/32.jpg",
-    nom: "Nom Utilisateur",
-    role: "Collaborateur",
-    email: "email@example.com",
-    phone: null,
-    address: "Casablanca, Maroc",
-    department: "Ressources Humaines",
-    joinDate: null,
-    position: "Spécialiste RH",
-    education: "Master en Gestion des Ressources Humaines",
-    skills: ["Recrutement", "Formation", "Gestion des talents", "SIRH"],
-    matricule: "EMP12345",
-    chefHierarchique: "N/A",
-    sexe: null,
-    code_soc: null,
-  })
-  const [loading, setLoading] = useState(true)
   const colorScheme = useColorScheme()
   const [isDarkMode, setIsDarkMode] = useState(colorScheme === "dark")
   const [activeTab, setActiveTab] = useState("personal")
+  const [refreshing, setRefreshing] = useState(false)
+  const [userInfo, setUserInfo] = useState<UserProfileData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const loadData = async () => {
-      await loadThemePreference()
-      await getUserInfo()
+    const loadUserData = async () => {
+      try {
+        const userInfoStr = await AsyncStorage.getItem("userInfo")
+        if (userInfoStr) {
+          const parsedInfo = JSON.parse(userInfoStr)
+          
+          const userData: UserProfileData = {
+            profileImage: null,
+            nom: parsedInfo.nom || null,
+            prenom: parsedInfo.prenom || null,
+            role: parsedInfo.role || "Collaborateur",
+            email: parsedInfo.email || null,
+            phone: parsedInfo.telephone || null,
+            address: null,
+            serviceName: parsedInfo.serviceName || null,
+            joinDate: parsedInfo.date_embauche || null,
+            position: null,
+            education: null,
+            skills: null,
+            matricule: parsedInfo.matricule || null,
+            chefHierarchique: "N/A",
+            sexe: parsedInfo.sexe || null,
+            code_soc: parsedInfo.code_soc || null,
+            cin: parsedInfo.cin || null,
+            nbr_enfants: parsedInfo.nbr_enfants?.toString() || null,
+            situation: parsedInfo.situation || null,
+            date_naiss: parsedInfo.date_naiss || null,
+            active: parsedInfo.active || true,
+          }
+          
+          setUserInfo(userData)
+        }
+      } catch (err) {
+        setError("Failed to load user data")
+        console.error("Error loading user data:", err)
+      } finally {
+        setLoading(false)
+      }
     }
-    loadData()
+    
+    loadUserData()
   }, [])
 
-  const loadThemePreference = async () => {
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
     try {
-      const storedTheme = await AsyncStorage.getItem("@theme_mode")
-      if (storedTheme !== null) {
-        setIsDarkMode(storedTheme === "dark")
+      const userInfoStr = await AsyncStorage.getItem("userInfo")
+      if (userInfoStr) {
+        const parsedInfo = JSON.parse(userInfoStr)
+        
+        const userData: UserProfileData = {
+          profileImage: null,
+          nom: parsedInfo.nom || null,
+          prenom: parsedInfo.prenom || null,
+          role: parsedInfo.role || "Collaborateur",
+          email: parsedInfo.email || null,
+          phone: parsedInfo.telephone || null,
+          address: null,
+          serviceName: parsedInfo.serviceName || null,
+          joinDate: parsedInfo.date_embauche || null,
+          position: null,
+          education: null,
+          skills: null,
+          matricule: parsedInfo.matricule || null,
+          chefHierarchique: "N/A",
+          sexe: parsedInfo.sexe || null,
+          code_soc: parsedInfo.code_soc || null,
+          cin: parsedInfo.cin || null,
+          nbr_enfants: parsedInfo.nbr_enfants?.toString() || null,
+          situation: parsedInfo.situation || null,
+          date_naiss: parsedInfo.date_naiss || null,
+          active: parsedInfo.active || true,
+        }
+        
+        setUserInfo(userData)
       }
-    } catch (error) {
-      console.error("Error loading theme preference:", error)
+    } catch (err) {
+      setError("Failed to refresh user data")
+      console.error("Error refreshing user data:", err)
+    } finally {
+      setRefreshing(false)
     }
-  }
+  }, [])
 
   const toggleTheme = async () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)
     try {
       await AsyncStorage.setItem("@theme_mode", newTheme)
+      await AsyncStorage.setItem("theme", newTheme)
+      
     } catch (error) {
       console.error("Error saving theme preference:", error)
     }
   }
 
-  const getUserInfo = async () => {
-    setLoading(true)
-    try {
-      const userInfo = await AsyncStorage.getItem("userInfo")
-      const token = await AsyncStorage.getItem("userToken")
-
-      if (userInfo && token) {
-        const parsedUser = JSON.parse(userInfo)
-        const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${parsedUser.id}`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error("Erreur lors de la récupération des données")
-        }
-
-        const data = await response.json()
-
-        const enhancedData = {
-          ...data,
-          profileImage: data.profileImage || "https://randomuser.me/api/portraits/men/32.jpg",
-          nom: data.nom || "Nom Utilisateur",
-          role: data.role || "Collaborateur",
-          email: data.email || "email@example.com",
-          phone: data.telephone || null,
-          address: data.address || "Casablanca, Maroc",
-          department: data.service?.serviceName || "Ressources Humaines",
-          joinDate: data.date_embauche || null,
-          position: data.position || "Spécialiste RH",
-          education: data.education || "Master en Gestion des Ressources Humaines",
-          skills: data.skills || ["Recrutement", "Formation", "Gestion des talents", "SIRH"],
-          matricule: data.matricule || "EMP12345",
-          chefHierarchique: data.chefHierarchique ? `${data.chefHierarchique.nom} ${data.chefHierarchique.prenom}` : "N/A",
-          sexe: data.sexe || null,
-          code_soc: data.code_soc || null,
-        }
-
-        setUserInfo(enhancedData)
-      }
-    } catch (error) {
-      console.log("Erreur lors de la récupération des infos utilisateur", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const themeStyles = isDarkMode ? darkStyles : lightStyles
+  
 
   const InfoItem = ({ icon, label, value }: InfoItemProps) => (
     <View style={[styles.infoItem, themeStyles.infoItem]}>
       <View style={[styles.infoIconContainer, themeStyles.infoIconContainer]}>{icon}</View>
       <View style={styles.infoContent}>
         <Text style={[styles.infoLabel, themeStyles.subtleText]}>{label}</Text>
-        <Text style={[styles.infoValue, themeStyles.text]}>{value !== null && value !== undefined ? value : "null"}</Text>
+        <Text style={[styles.infoValue, themeStyles.text]}>
+          {value !== null && value !== undefined ? value : "Non renseigné"}
+        </Text>
       </View>
     </View>
   )
@@ -208,6 +238,30 @@ const ProfilePage = () => {
     )
   }
 
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.container, themeStyles.container]}>
+        <View style={[styles.header, themeStyles.header]}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("AccueilCollaborateur")}>
+              <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, themeStyles.text]}>Profil</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.iconButton} onPress={toggleTheme}>
+              {isDarkMode ? <Sun size={22} color="#E0E0E0" /> : <Moon size={22} color="#333" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, themeStyles.text, { color: 'red' }]}>{error}</Text>
+        </View>
+        <Footer />
+      </SafeAreaView>
+    )
+  }
+
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
       <Navbar isDarkMode={isDarkMode} toggleTheme={toggleTheme} handleLogout={() => {}} />
@@ -216,15 +270,17 @@ const ProfilePage = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={[styles.profileHeader, themeStyles.card]}>
-         
-          <Text style={[styles.profileName, themeStyles.text]}>{userInfo.nom} {userInfo.prenom} </Text>
-          <Text style={[styles.profileRole, themeStyles.subtleText]}>{userInfo.role}</Text>
+          <Text style={[styles.profileName, themeStyles.text]}>
+            {userInfo?.nom} {userInfo?.prenom}
+          </Text>
+          <Text style={[styles.profileRole, themeStyles.subtleText]}>{userInfo?.role}</Text>
 
           <View style={styles.badgeContainer}>
             <View style={[styles.badge, themeStyles.badge]}>
-              <Text style={[styles.badgeText, themeStyles.badgeText]}>Actif</Text>
+              <Text style={[styles.badgeText, themeStyles.badgeText]}>{userInfo?.active ? "Actif" : "Inactif"}</Text>
             </View>
           </View>
 
@@ -295,34 +351,51 @@ const ProfilePage = () => {
 
             <View style={styles.infoGrid}>
               <InfoItem
-                icon={<Mail size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
+                icon={<Mail size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 label="Email"
-                value={userInfo.email}
+                value={userInfo?.email}
               />
 
               <InfoItem
-                icon={<Phone size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
+                icon={<Phone size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 label="Téléphone"
-                value={userInfo.phone}
+                value={userInfo?.phone}
               />
 
-
               <InfoItem
-                icon={<Shield size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
+                icon={<Shield size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 label="Statut"
-                value={userInfo.active ? "Actif" : "Inactif"}
+                value={userInfo?.active ? "Actif" : "Inactif"}
               />
 
               <InfoItem
-                icon={<User size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
+                icon={<User size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 label="Sexe"
-                value={userInfo.sexe}
+                value={userInfo?.sexe}
               />
 
               <InfoItem
-                icon={<Building size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
+                icon={<Building size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 label="Date de naissance"
-                value={userInfo.date_naiss}
+                value={userInfo?.date_naiss}
+              />
+
+              <InfoItem
+                icon={<IdCard size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
+                label="CIN"
+                value={userInfo?.cin}
+              />
+
+              <InfoItem
+                icon={<Heart size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
+                label="Situation"
+                value={userInfo?.situation}
+              />
+
+              <InfoItem
+                icon={<Users size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
+                label="Nombre d'enfants"
+                value={userInfo?.nbr_enfants}
               />
             </View>
           </View>
@@ -337,30 +410,28 @@ const ProfilePage = () => {
                 <InfoItem
                   icon={<User size={20} color={isDarkMode ? "#4CAF50" : "#4CAF50"} />}
                   label="Matricule"
-                  value={userInfo.matricule}
+                  value={userInfo?.matricule}
                 />
 
                 <InfoItem
                   icon={<Building size={20} color={isDarkMode ? "#4CAF50" : "#4CAF50"} />}
                   label="Département"
-                  value={userInfo.department}
+                  value={userInfo?.serviceName}
                 />
 
-<InfoItem
-                icon={<Building size={20} color={isDarkMode ? "#4CAF50" : "#4CAF50"} />}
-                label="Code Société"
-                value={userInfo.code_soc}
-              />
+                <InfoItem
+                  icon={<Building size={20} color={isDarkMode ? "#4CAF50" : "#4CAF50"} />}
+                  label="Code Société"
+                  value={userInfo?.code_soc}
+                />
 
                 <InfoItem
                   icon={<Calendar size={20} color={isDarkMode ? "#4CAF50" : "#4CAF50"} />}
                   label="Date d'embauche"
-                  value={userInfo.joinDate}
+                  value={userInfo?.joinDate}
                 />
               </View>
             </View>
-
-
           </>
         )}
 
@@ -370,21 +441,9 @@ const ProfilePage = () => {
 
             <View style={styles.actionsList}>
               <ActionButton
-                icon={<FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
+                icon={<FileText size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 title="Mes documents"
                 onPress={() => {}}
-              />
-
-              <ActionButton
-                icon={<Clock size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
-                title="Historique des demandes"
-                onPress={() => navigation.navigate("Demandestot")}
-              />
-
-              <ActionButton
-                icon={<Calendar size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} />}
-                title="Mon calendrier"
-                onPress={() => navigation.navigate("Calendar")}
               />
 
             </View>
@@ -618,7 +677,7 @@ const lightStyles = StyleSheet.create({
     borderBottomColor: "#EEEEEE",
   },
   text: {
-    color: "#333333",
+    color: "#1a1f38",
   },
   subtleText: {
     color: "#757575",
@@ -676,11 +735,11 @@ const lightStyles = StyleSheet.create({
 
 const darkStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#121212",
+    backgroundColor: "#1a1f38",
   },
   header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderBottomColor: "#1a1f38",
   },
   text: {
     color: "#E0E0E0",
@@ -692,18 +751,18 @@ const darkStyles = StyleSheet.create({
     color: "#B388FF",
   },
   profileHeader: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderColor: "#1a1f38",
     borderWidth: 1,
   },
   card: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderColor: "#1a1f38",
     borderWidth: 1,
   },
   infoItem: {
     borderBottomWidth: 1,
-    borderBottomColor: "#333333",
+    borderBottomColor: "#1a1f38",
   },
   infoIconContainer: {
     backgroundColor: "rgba(147, 112, 219, 0.15)",
@@ -715,12 +774,12 @@ const darkStyles = StyleSheet.create({
     color: "#81C784",
   },
   editButton: {
-    backgroundColor: "#333333",
+    backgroundColor: "#1a1f38",
     borderColor: "#444444",
   },
   actionButton: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderColor: "#1a1f38",
   },
   activeTab: {
     borderBottomColor: "#B388FF",

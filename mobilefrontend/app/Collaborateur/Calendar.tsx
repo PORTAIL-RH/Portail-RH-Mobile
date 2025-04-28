@@ -1,6 +1,4 @@
-"use client"
-
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import {
   View,
   Text,
@@ -11,6 +9,8 @@ import {
   ActivityIndicator,
   useColorScheme,
   Dimensions,
+  RefreshControl,
+  Modal,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -24,13 +24,12 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   XCircle,
-  AlertCircle,
 } from "lucide-react-native"
 import Footer from "../Components/Footer"
 import { API_CONFIG } from "../config/apiConfig"
+import useApiPooling from "../useApiPooling"
 
-// Définir les types de navigation
-export type RootStackParamList = {
+type RootStackParamList = {
   AccueilCollaborateur: undefined
   Profile: undefined
   Demandestot: undefined
@@ -41,18 +40,17 @@ export type RootStackParamList = {
   Calendar: undefined
 }
 
-// Définir le type de navigation pour la page Calendrier
 type CalendarNavigationProp = NativeStackNavigationProp<RootStackParamList, "Calendar">
 
 const { width } = Dimensions.get("window")
 
-// Définir le type de congé
-type Leave = {
+type CalendarEvent = {
   id: string
+  title: string
   type: string
   startDate: Date
   endDate: Date
-  status: "approved" | "rejected" | "pending"
+  status: "approved"
   duration: string
   comment?: string
 }
@@ -61,140 +59,161 @@ const CalendarPage = () => {
   const navigation = useNavigation<CalendarNavigationProp>()
   const systemColorScheme = useColorScheme()
   const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark")
-  const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [leaves, setLeaves] = useState<Leave[]>([])
-  const [userName, setUserName] = useState("Nom Utilisateur")
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [showEventModal, setShowEventModal] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
 
-  // Charger les préférences de thème, les informations utilisateur et les demandes de congé
-  useEffect(() => {
-    const loadData = async () => {
-      await loadThemePreference()
-      const userId = await getUserInfo()
-      if (userId) {
-        await fetchLeaveRequests(userId)
-      }
-      // Simuler un délai d'appel API
-      setTimeout(() => {
-        setLoading(false)
-        console.log("Chargement terminé") // Debug log
-      }, 1000)
-    }
-    loadData()
-  }, [])
+  const {
+    data: userData,
+    loading: userLoading,
+    error: userError,
+    refresh: refreshUserData,
+  } = useApiPooling<{ nom: string; prenom: string; role: string }>({
+    apiCall: async () => {
+      const userInfoStr = await AsyncStorage.getItem("userInfo")
+      const token = await AsyncStorage.getItem("userToken")
 
-  // Charger les préférences de thème depuis AsyncStorage
-  const loadThemePreference = async () => {
-    try {
-      const storedTheme = await AsyncStorage.getItem("@theme_mode")
-      if (storedTheme !== null) {
-        setIsDarkMode(storedTheme === "dark")
+      if (!userInfoStr || !token) {
+        throw new Error("User information not available")
       }
-    } catch (error) {
-      console.error("Erreur lors du chargement des préférences de thème:", error)
-    }
+
+      const parsedUser = JSON.parse(userInfoStr)
+      const userId = parsedUser.id
+      setUserId(userId)
+
+      if (!userId) {
+        throw new Error("User ID not available")
+      }
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch user information")
+      }
+
+      const data = await response.json()
+      return {
+        nom: data.nom || "User",
+        prenom: data.prenom || "",
+        role: data.role || "Collaborateur",
+      }
+    },
+    storageKey: "user_profile_data",
+    poolingInterval: 300000,
+    dependsOnAuth: true,
+  })
+
+  const {
+    data: calendarEvents,
+    loading: eventsLoading,
+    error: eventsError,
+    refresh: refreshEvents,
+  } = useApiPooling<CalendarEvent[]>({
+    apiCall: async () => {
+      if (!userId) {
+        throw new Error("User ID not available")
+      }
+
+      const token = await AsyncStorage.getItem("userToken")
+      if (!token) {
+        throw new Error("Authentication token not available")
+      }
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch leave requests")
+      }
+
+      const conges = await response.json()
+      return mapEvents(conges, "congé")
+    },
+    storageKey: "user_calendar_events",
+    poolingInterval: 60000,
+    initialData: [],
+    dependsOnAuth: true,
+  })
+
+  const mapEvents = (data: any[], type: string): CalendarEvent[] => {
+    if (!Array.isArray(data)) return []
+
+    return data
+      .filter((item) => item.dateDebut && item.reponseChef === "O")
+      .map((item) => {
+        const startDate = new Date(item.dateDebut)
+        const endDate = item.dateFin ? new Date(item.dateFin) : startDate
+
+        return {
+          id: item.id_libre_demande || item.id,
+          title: `Demande de ${type}`,
+          type: type,
+          startDate: startDate,
+          endDate: endDate,
+          status: "approved",
+          duration: item.nbrJours ? `${item.nbrJours} jour(s)` : "1 jour",
+          comment: item.texteDemande || "",
+        }
+      })
   }
 
-  // Basculer entre le mode clair et sombre
+  useEffect(() => {
+    const loadThemePreference = async () => {
+      try {
+        const storedTheme = await AsyncStorage.getItem("@theme_mode")
+        if (storedTheme !== null) {
+          setIsDarkMode(storedTheme === "dark")
+        }
+      } catch (error) {
+        console.error("Error loading theme preference:", error)
+      }
+    }
+    loadThemePreference()
+  }, [])
+
   const toggleTheme = async () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)
     try {
+      await AsyncStorage.setItem("theme", newTheme)
       await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
-      console.error("Erreur lors de l'enregistrement des préférences de thème:", error)
+      console.error("Error saving theme preference:", error)
     }
   }
 
-  // Récupérer les informations utilisateur depuis AsyncStorage
-  const getUserInfo = async () => {
-    try {
-      const userInfo = await AsyncStorage.getItem("userInfo")
-      if (userInfo) {
-        const parsedUser = JSON.parse(userInfo)
-        const userId = parsedUser.id
-        const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${userId}`)
-        if (!response.ok) {
-          throw new Error("Échec de la récupération des informations utilisateur")
-        }
-        const data = await response.json()
-        console.log("Informations utilisateur:", data) // Debug log
-        setUserName(data.nom || "Utilisateur")
-        return userId
-      }
-    } catch (error) {
-      console.error("Erreur lors de la récupération des informations utilisateur:", error)
-    }
-  }
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await Promise.all([refreshUserData(true), refreshEvents(true)])
+    setRefreshing(false)
+  }, [refreshUserData, refreshEvents])
 
-  // Récupérer les demandes de congé depuis l'API
-  const fetchLeaveRequests = async (userId: string) => {
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}`)
-      if (!response.ok) {
-        throw new Error("Échec de la récupération des demandes de congé")
-      }
-      const data = await response.json()
-      console.log("Demandes de congé:", data) // Debug log
-
-      const formattedLeaves = data.map((leave: any) => ({
-        id: leave.id,
-        type: leave.typeDemande || "N/A",
-        startDate: parseDate(leave.dateDebut),
-        endDate: parseDate(leave.dateFin),
-        status: mapStatus(leave.reponseChef, leave.reponseRH),
-        duration: leave.nbrJours ? `${leave.nbrJours} jours` : "N/A",
-        comment: leave.texteDemande || "Aucun commentaire",
-      }))
-
-      console.log("Demandes de congé formatées:", formattedLeaves) // Debug log
-      setLeaves(formattedLeaves)
-    } catch (error) {
-      console.error("Erreur lors de la récupération des demandes de congé:", error)
-    }
-  }
-
-  // Parser les dates
-  const parseDate = (dateString: string) => {
-    const date = new Date(dateString)
-    if (isNaN(date.getTime())) {
-      console.error("Date invalide:", dateString)
-      return new Date() // Retourner la date actuelle en cas d'erreur
-    }
-    return date
-  }
-
-  // Mapper les statuts
-  const mapStatus = (reponseChef: string, reponseRH: string) => {
-    if (reponseChef === "O") {
-      return "approved" // Seulement si reponseChef est "O"
-    } else if (reponseChef === "N" || reponseRH === "I") {
-      return "rejected"
-    } 
-  }
-
-  // Appliquer les styles en fonction du thème
   const themeStyles = isDarkMode ? darkStyles : lightStyles
 
-  // Obtenir les jours du mois
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
     const daysInMonth = new Date(year, month + 1, 0).getDate()
     const firstDayOfMonth = new Date(year, month, 1).getDay()
 
-    // Ajuster pour le dimanche comme premier jour (0)
     const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1
 
     const days: { day: number | null; date: Date | null }[] = []
 
-    // Ajouter des emplacements vides pour les jours avant le premier jour du mois
     for (let i = 0; i < adjustedFirstDay; i++) {
       days.push({ day: null, date: null })
     }
 
-    // Ajouter les jours du mois
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(year, month, i)
       days.push({ day: i, date })
@@ -203,85 +222,72 @@ const CalendarPage = () => {
     return days
   }
 
-  // Aller au mois précédent
   const goToPreviousMonth = () => {
     const previousMonth = new Date(currentMonth)
     previousMonth.setMonth(previousMonth.getMonth() - 1)
     setCurrentMonth(previousMonth)
   }
 
-  // Aller au mois suivant
   const goToNextMonth = () => {
     const nextMonth = new Date(currentMonth)
     nextMonth.setMonth(nextMonth.getMonth() + 1)
     setCurrentMonth(nextMonth)
   }
 
-  // Formater le nom du mois
   const formatMonthName = (date: Date) => {
     return date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
   }
 
-  // Vérifier si une date a un congé
-  const hasLeave = (date: Date) => {
-    for (const leave of leaves) {
-      const startDate = new Date(leave.startDate)
-      const endDate = new Date(leave.endDate)
+  const getDateEvents = (date: Date | null) => {
+    if (!date || !calendarEvents) return []
+    return calendarEvents.filter((event) => {
+      const eventStartDate = new Date(event.startDate)
+      const eventEndDate = new Date(event.endDate)
 
-      // Vérifier si la date est comprise entre startDate et endDate
-      if (date >= startDate && date <= endDate) {
-        return { has: true, status: leave.status }
-      }
-    }
-    return { has: false }
+      const compareDate = new Date(date)
+      compareDate.setHours(0, 0, 0, 0)
+
+      const compareStartDate = new Date(eventStartDate)
+      compareStartDate.setHours(0, 0, 0, 0)
+
+      const compareEndDate = new Date(eventEndDate)
+      compareEndDate.setHours(0, 0, 0, 0)
+
+      return compareDate >= compareStartDate && compareDate <= compareEndDate
+    })
   }
 
-  // Obtenir la couleur du statut du congé
-  const getLeaveStatusColor = (status: "approved" | "rejected" | "pending") => {
-    switch (status) {
-      case "approved":
-        return "#4CAF50"
-      
-
-    }
-  }
-
-  // Obtenir l'icône du statut du congé
-  const getLeaveStatusIcon = (status: "approved" | "rejected" | "pending") => {
-    switch (status) {
-      case "approved":
-        return <CheckCircle2 size={16} color="#4CAF50" />
-       
-
-    }
-  }
-
-  // Formater la date
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
   }
 
-  // Obtenir tous les congés approuvés
-  const getApprovedLeaves = () => {
-    return leaves
-      .filter((leave) => leave.status === "approved") // Filtrer uniquement les congés approuvés
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()) // Trier par date de début
+  const getApprovedEvents = () => {
+    if (!calendarEvents) return []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    return calendarEvents
+      .filter(event => new Date(event.endDate) >= today)
+      .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
   }
 
-  // Jours de la semaine
-  const daysOfWeek = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+  const handleDateSelect = (date: Date | null) => {
+    if (!date) return
+    setSelectedDate(date)
+    const events = getDateEvents(date)
+    if (events.length > 0) {
+      setSelectedEvent(events[0])
+      setShowEventModal(true)
+    }
+  }
 
-  // Jours du mois actuel
+  const daysOfWeek = ["D", "L", "M", "M", "J", "V", "S"]
   const daysInMonth = getDaysInMonth(currentMonth)
-  console.log("Jours du mois:", daysInMonth) // Debug log
-
-  // Congés approuvés
-  const approvedLeaves = getApprovedLeaves()
-  console.log("Congés approuvés:", approvedLeaves) // Debug log
+  const approvedEvents = getApprovedEvents()
+  const isLoading = userLoading && eventsLoading && !calendarEvents
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
-      {/* En-tête personnalisé */}
       <View style={[styles.header, themeStyles.header]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("AccueilCollaborateur")}>
@@ -296,27 +302,31 @@ const CalendarPage = () => {
         </View>
       </View>
 
-      {/* Contenu */}
-      {loading ? (
+      {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#9370DB" />
+          <ActivityIndicator size="large" color="#4285F4" />
+          <Text style={[styles.loadingText, themeStyles.text]}>Chargement du calendrier...</Text>
         </View>
       ) : (
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          {/* En-tête du calendrier */}
           <View style={[styles.calendarHeader, themeStyles.card]}>
             <View style={styles.userInfo}>
-              <CalendarIcon size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />
-              <Text style={[styles.userName, themeStyles.text]}>{userName}</Text>
+              <CalendarIcon size={24} color={isDarkMode ? "#4285F4" : "#4285F4"} />
+              <Text style={[styles.userName, themeStyles.text]}>
+                {userData ? `${userData.prenom} ${userData.nom}` : "Calendrier"}
+              </Text>
             </View>
-            <Text style={[styles.calendarSubtitle, themeStyles.subtleText]}>Visualisez vos congés et demandes</Text>
+            <Text style={[styles.calendarSubtitle, themeStyles.text]}>Nombre total de jours congés par an :</Text>
+
+            <Text style={[styles.calendarSubtitle, themeStyles.subtleText]}>Vos congés approuvés</Text>
+
           </View>
 
-          {/* Navigation entre les mois */}
           <View style={[styles.monthNavigation, themeStyles.card]}>
             <TouchableOpacity style={styles.monthButton} onPress={goToPreviousMonth}>
               <ChevronLeft size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
@@ -327,9 +337,7 @@ const CalendarPage = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Calendrier */}
           <View style={[styles.calendarContainer, themeStyles.card]}>
-            {/* Jours de la semaine */}
             <View style={styles.daysOfWeek}>
               {daysOfWeek.map((day, index) => (
                 <View key={index} style={styles.dayOfWeekCell}>
@@ -338,23 +346,26 @@ const CalendarPage = () => {
               ))}
             </View>
 
-            {/* Grille du calendrier */}
             <View style={styles.calendarGrid}>
               {daysInMonth.map((day, index) => {
-                const isToday =
-                  day.date &&
-                  day.date.getDate() === new Date().getDate() &&
-                  day.date.getMonth() === new Date().getMonth() &&
-                  day.date.getFullYear() === new Date().getFullYear()
+                if (!day.date) {
+                  return <View key={index} style={[styles.calendarCell, styles.emptyCell]} />
+                }
+
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const isToday = day.date && 
+                              day.date.getDate() === today.getDate() && 
+                              day.date.getMonth() === today.getMonth() && 
+                              day.date.getFullYear() === today.getFullYear()
 
                 const isSelected =
-                  day.date &&
                   day.date.getDate() === selectedDate.getDate() &&
                   day.date.getMonth() === selectedDate.getMonth() &&
                   day.date.getFullYear() === selectedDate.getFullYear()
 
-                const leaveInfo = day.date ? hasLeave(day.date) : { has: false }
-                console.log("Informations sur le congé:", leaveInfo) // Debug log
+                const dateEvents = getDateEvents(day.date)
+                const hasEvents = dateEvents.length > 0
 
                 return (
                   <TouchableOpacity
@@ -362,100 +373,160 @@ const CalendarPage = () => {
                     style={[
                       styles.calendarCell,
                       isToday && styles.todayCell,
-                      isToday && themeStyles.todayCell,
                       isSelected && styles.selectedCell,
-                      isSelected && themeStyles.selectedCell,
-                      !day.day && styles.emptyCell,
+                      hasEvents && styles.approvedCell,
                     ]}
-                    onPress={() => day.date && setSelectedDate(day.date)}
-                    disabled={!day.day}
+                    onPress={() => handleDateSelect(day.date)}
                   >
-                    {day.day && (
-                      <>
-                        <Text
-                          style={[
-                            styles.calendarDayText,
-                            themeStyles.text,
-                            isToday && styles.todayText,
-                            isSelected && styles.selectedText,
-                          ]}
-                        >
-                          {day.day}
-                        </Text>
-                        {leaveInfo.has && (
-                          <View
-                            style={[styles.leaveIndicator, { backgroundColor: getLeaveStatusColor(leaveInfo.status) }]}
-                          />
-                        )}
-                      </>
-                    )}
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        themeStyles.text,
+                        isToday && styles.todayText,
+                        isSelected && styles.selectedText,
+                        hasEvents && styles.approvedText,
+                      ]}
+                    >
+                      {day.day}
+                    </Text>
                   </TouchableOpacity>
                 )
               })}
             </View>
           </View>
 
-          {/* Légende */}
           <View style={[styles.legendContainer, themeStyles.card]}>
             <Text style={[styles.legendTitle, themeStyles.text]}>Légende</Text>
             <View style={styles.legendItems}>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: "#4CAF50" }]} />
-                <Text style={[styles.legendText, themeStyles.text]}>Approuvé</Text>
+                <View style={[styles.legendColorBox, { backgroundColor: "rgba(76, 175, 80, 0.2)" }]} />
+                <Text style={[styles.legendText, themeStyles.text]}>Jour de congé approuvé</Text>
               </View>
-              
             </View>
           </View>
 
-          {/* Congés approuvés */}
           <View style={styles.sectionContainer}>
-            <Text style={[styles.sectionTitle, themeStyles.text]}>Congés Approuvés</Text>
+            <Text style={[styles.sectionTitle, themeStyles.text]}>Prochains congés</Text>
 
-            {approvedLeaves.length === 0 ? (
-              <View style={[styles.emptyLeaves, themeStyles.card]}>
-                <Text style={[styles.emptyLeavesText, themeStyles.subtleText]}>Aucun congé approuvé</Text>
+            {approvedEvents.length === 0 ? (
+              <View style={[styles.emptyEvents, themeStyles.card]}>
+                <Text style={[styles.emptyEventsText, themeStyles.subtleText]}>Aucun congé approuvé à venir</Text>
               </View>
             ) : (
-              approvedLeaves.map((leave) => (
-                <View key={leave.id} style={[styles.leaveCard, themeStyles.card]}>
-                  <View style={styles.leaveCardHeader}>
-                    <View style={styles.leaveTypeContainer}>
-                      <Text style={[styles.leaveType, themeStyles.text]}>{leave.type}</Text>
-                      {getLeaveStatusIcon(leave.status)}
+              approvedEvents.slice(0, 3).map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[styles.eventCard, themeStyles.card]}
+                  onPress={() => {
+                    setSelectedEvent(event)
+                    setShowEventModal(true)
+                  }}
+                >
+                  <View style={styles.eventCardHeader}>
+                    <View style={styles.eventTypeContainer}>
+                      <Text style={[styles.eventType, themeStyles.text]}>{event.title}</Text>
+                      <CheckCircle2 size={16} color="#4CAF50" />
                     </View>
-                    <Text style={[styles.leaveDuration, themeStyles.subtleText]}>{leave.duration}</Text>
+                    <Text style={[styles.eventDuration, themeStyles.subtleText]}>{event.duration}</Text>
                   </View>
 
-                  <View style={styles.leaveDates}>
+                  <View style={styles.eventDates}>
                     <View style={styles.dateContainer}>
                       <Text style={[styles.dateLabel, themeStyles.subtleText]}>Du:</Text>
-                      <Text style={[styles.dateValue, themeStyles.text]}>{formatDate(leave.startDate)}</Text>
+                      <Text style={[styles.dateValue, themeStyles.text]}>{formatDate(new Date(event.startDate))}</Text>
                     </View>
                     <View style={styles.dateContainer}>
                       <Text style={[styles.dateLabel, themeStyles.subtleText]}>Au:</Text>
-                      <Text style={[styles.dateValue, themeStyles.text]}>{formatDate(leave.endDate)}</Text>
+                      <Text style={[styles.dateValue, themeStyles.text]}>{formatDate(new Date(event.endDate))}</Text>
                     </View>
                   </View>
 
-                  {leave.comment && (
-                    <Text style={[styles.leaveComment, themeStyles.subtleText]}>Note: {leave.comment}</Text>
+                  {event.comment && (
+                    <Text style={[styles.eventComment, themeStyles.subtleText]} numberOfLines={2}>
+                      Note: {event.comment}
+                    </Text>
                   )}
 
-                  <View style={[styles.leaveStatusBar, { backgroundColor: getLeaveStatusColor(leave.status) }]} />
-                </View>
+                  <View style={[styles.eventStatusBar, { backgroundColor: "#4CAF50" }]} />
+                </TouchableOpacity>
               ))
             )}
           </View>
         </ScrollView>
       )}
 
-      {/* Pied de page */}
+      <Modal
+        visible={showEventModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEventModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, themeStyles.card]}>
+            {selectedEvent && (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, themeStyles.text]}>{selectedEvent.title}</Text>
+                  <TouchableOpacity onPress={() => setShowEventModal(false)}>
+                    <XCircle size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalContent}>
+                  <View style={styles.modalStatusContainer}>
+                    <CheckCircle2 size={24} color="#4CAF50" />
+                    <Text style={[styles.modalStatusText, { color: "#4CAF50" }]}>Approuvé</Text>
+                  </View>
+
+                  <View style={styles.modalInfoItem}>
+                    <Text style={[styles.modalInfoLabel, themeStyles.subtleText]}>Type:</Text>
+                    <Text style={[styles.modalInfoValue, themeStyles.text]}>{selectedEvent.type}</Text>
+                  </View>
+
+                  <View style={styles.modalInfoItem}>
+                    <Text style={[styles.modalInfoLabel, themeStyles.subtleText]}>Durée:</Text>
+                    <Text style={[styles.modalInfoValue, themeStyles.text]}>{selectedEvent.duration}</Text>
+                  </View>
+
+                  <View style={styles.modalInfoItem}>
+                    <Text style={[styles.modalInfoLabel, themeStyles.subtleText]}>Date de début:</Text>
+                    <Text style={[styles.modalInfoValue, themeStyles.text]}>
+                      {formatDate(new Date(selectedEvent.startDate))}
+                    </Text>
+                  </View>
+
+                  <View style={styles.modalInfoItem}>
+                    <Text style={[styles.modalInfoLabel, themeStyles.subtleText]}>Date de fin:</Text>
+                    <Text style={[styles.modalInfoValue, themeStyles.text]}>
+                      {formatDate(new Date(selectedEvent.endDate))}
+                    </Text>
+                  </View>
+
+                  {selectedEvent.comment && (
+                    <View style={styles.modalInfoItem}>
+                      <Text style={[styles.modalInfoLabel, themeStyles.subtleText]}>Commentaire:</Text>
+                      <Text style={[styles.modalInfoValue, themeStyles.text]}>{selectedEvent.comment}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.modalCloseButton, { backgroundColor: "#4CAF50" }]}
+                  onPress={() => setShowEventModal(false)}
+                >
+                  <Text style={styles.modalCloseButtonText}>Fermer</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <Footer />
     </SafeAreaView>
   )
 }
 
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -467,6 +538,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
+    paddingTop: 40,
   },
   headerLeft: {
     flexDirection: "row",
@@ -493,6 +565,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
   },
   scrollContainer: {
     flex: 1,
@@ -569,10 +645,14 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   todayCell: {
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
+    backgroundColor: "rgba(0, 51, 133, 0.88)",
+    borderRadius: 20,
   },
   selectedCell: {
-    backgroundColor: "#9370DB",
+    backgroundColor: "#4285F4",
+  },
+  approvedCell: {
+    backgroundColor: "rgba(76, 175, 80, 0.2)",
   },
   calendarDayText: {
     fontSize: 16,
@@ -584,12 +664,9 @@ const styles = StyleSheet.create({
   selectedText: {
     color: "white",
   },
-  leaveIndicator: {
-    position: "absolute",
-    bottom: 6,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  approvedText: {
+    color: "#4CAF50",
+    fontWeight: "bold",
   },
   legendContainer: {
     padding: 16,
@@ -609,10 +686,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  legendColorBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
     marginRight: 8,
   },
   legendText: {
@@ -626,41 +703,41 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 12,
   },
-  emptyLeaves: {
+  emptyEvents: {
     padding: 20,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  emptyLeavesText: {
+  emptyEventsText: {
     fontSize: 16,
   },
-  leaveCard: {
+  eventCard: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     position: "relative",
     overflow: "hidden",
   },
-  leaveCardHeader: {
+  eventCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
   },
-  leaveTypeContainer: {
+  eventTypeContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  leaveType: {
+  eventType: {
     fontSize: 16,
     fontWeight: "600",
   },
-  leaveDuration: {
+  eventDuration: {
     fontSize: 14,
   },
-  leaveDates: {
+  eventDates: {
     marginBottom: 12,
   },
   dateContainer: {
@@ -675,20 +752,75 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
-  leaveComment: {
+  eventComment: {
     fontSize: 14,
     fontStyle: "italic",
   },
-  leaveStatusBar: {
+  eventStatusBar: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
     width: 4,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    width: "90%",
+    maxHeight: "80%",
+    borderRadius: 12,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  modalContent: {
+    marginBottom: 16,
+  },
+  modalStatusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 8,
+  },
+  modalStatusText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalInfoItem: {
+    marginBottom: 12,
+  },
+  modalInfoLabel: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  modalInfoValue: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  modalCloseButton: {
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalCloseButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 })
 
-// Styles pour le mode clair
 const lightStyles = StyleSheet.create({
   container: {
     backgroundColor: "#F5F5F5",
@@ -711,22 +843,15 @@ const lightStyles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  todayCell: {
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
-  },
-  selectedCell: {
-    backgroundColor: "#9370DB",
-  },
 })
 
-// Styles pour le mode sombre
 const darkStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#121212",
+    backgroundColor: "#1a1f38",
   },
   header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderBottomColor: "#1a1f38",
   },
   text: {
     color: "#E0E0E0",
@@ -735,15 +860,9 @@ const darkStyles = StyleSheet.create({
     color: "#AAAAAA",
   },
   card: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderColor: "#1a1f38",
     borderWidth: 1,
-  },
-  todayCell: {
-    backgroundColor: "rgba(147, 112, 219, 0.2)",
-  },
-  selectedCell: {
-    backgroundColor: "#9370DB",
   },
 })
 
