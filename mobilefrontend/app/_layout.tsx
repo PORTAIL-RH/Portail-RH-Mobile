@@ -1,6 +1,5 @@
 import React, { useEffect, useContext } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
-import Toast, { BaseToast } from 'react-native-toast-message';
 import { DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,6 +7,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { API_CONFIG, setApiConfig } from './config/apiConfig';
 import { ThemeProvider, useTheme } from "./ThemeContext"; // Import useTheme, remove ThemeContext
+import Toast from 'react-native-toast-message';
+
 
 // Importation des composants
 import Authentification from './Collaborateur/Authentification';
@@ -28,6 +29,8 @@ import AdminDashboard from './Admin/AdminDashboard';
 import AdminSideBar from './Admin/AdminSideBar';
 import Notificationsadmin from './Admin/Notifications';
 import Demandes from './Collaborateur/Demande/Demandes';
+
+
 import DemandesAdmin from './Admin/DemandesAdmin'
 import Personnel from './Admin/Personnel'
 
@@ -77,6 +80,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <InnerRootLayout colorScheme={colorScheme} />
+      <Toast />
     </ThemeProvider>
   );
 }

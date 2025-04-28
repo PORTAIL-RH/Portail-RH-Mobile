@@ -30,6 +30,7 @@ import {
 import Footer from "../../Components/Footer";
 import { API_CONFIG } from "../../config/apiConfig";
 import SidebarLayout from "./SidebarLayout";
+import Toast from 'react-native-toast-message';
 
 // Define the navigation stack types
 export type RootStackParamList = {
@@ -59,9 +60,21 @@ const DocumentPage = () => {
   const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [toastType, setToastType] = useState<"success" | "error">("success");
+
+  const showToast = (type: 'success' | 'error', message: string, shouldNavigate = false) => {
+    Toast.show({
+        type,
+        text1: type === 'success' ? 'Succès' : 'Erreur',
+        text2: message,
+        position: 'bottom',
+        visibilityTime: 3000,
+        onHide: () => {
+          if (shouldNavigate) {
+            navigation.navigate('AccueilCollaborateur');
+          }
+        }
+      });
+    };
 
   // Form state
   const [objet, setObjet] = useState("");
@@ -120,7 +133,9 @@ const DocumentPage = () => {
     const newTheme = isDarkMode ? "light" : "dark";
     setIsDarkMode(!isDarkMode);
     try {
-      await AsyncStorage.setItem("@theme_mode", newTheme);
+      // Update both keys for backward compatibility
+      await AsyncStorage.setItem("theme", newTheme)
+      await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
       console.error("Error saving theme preference:", error);
     }
@@ -175,13 +190,13 @@ const DocumentPage = () => {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedFile = result.assets[0];
         setFile(selectedFile);
-        displayToast("success", `Fichier "${selectedFile.name}" sélectionné`);
+        showToast("success", `Fichier "${selectedFile.name}" sélectionné`);
       } else {
         console.log("File selection cancelled by the user.");
       }
     } catch (err) {
       console.error("Error picking file:", err);
-      displayToast("error", "Une erreur est survenue lors de la sélection du fichier.");
+      showToast("error", "Une erreur est survenue lors de la sélection du fichier.");
     }
   };
 
@@ -193,27 +208,18 @@ const DocumentPage = () => {
   // Validate form
   const validateForm = () => {
     if (!objet.trim()) {
-      displayToast("error", "Veuillez préciser l'objet de votre demande.");
+      showToast("error", "Veuillez préciser l'objet de votre demande.");
       return false;
     }
 
     if (!matPersId.trim()) {
-      displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
+      showToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
       return false;
     }
 
     return true;
   };
 
-  // Display toast message
-  const displayToast = (type: "success" | "error", message: string) => {
-    setToastType(type);
-    setToastMessage(message);
-    setShowToast(true);
-    setTimeout(() => {
-      setShowToast(false);
-    }, 3000);
-  };
 
   // Handle form submission
   const handleSubmit = async () => {
@@ -224,25 +230,21 @@ const DocumentPage = () => {
     setSubmitting(true);
   
     try {
-      // Fetch user info from local storage
       const userInfoString = await AsyncStorage.getItem("userInfo");
       if (!userInfoString) {
-        displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
+        showToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
         setSubmitting(false);
         return;
       }
   
       const userInfo = JSON.parse(userInfoString);
-  
-      // Create FormData object
       const formData = new FormData();
-      formData.append("typeDemande", "Document"); // Fixed: Use "typeDemande" instead of "type"
-      formData.append("codeSoc", userInfo.codeSoc); // Fixed: Add "codeSoc"
-      formData.append("texteDemande", objet); // Fixed: Use "texteDemande" instead of "objet"
-      formData.append("matPersId", userInfo.id); // Fixed: Use "matPersId" instead of "matPers[id]"
-      formData.append("typeDocument", getSelectedDocumentType()); // Fixed: Add "typeDocument"
+      formData.append("typeDemande", "Document");
+      formData.append("codeSoc", userInfo.codeSoc);
+      formData.append("texteDemande", objet);
+      formData.append("matPersId", userInfo.id);
+      formData.append("typeDocument", getSelectedDocumentType());
   
-      // Append the file if it exists
       if (file) {
         const fileUri = Platform.OS === "android" ? file.uri : file.uri.replace("file://", "");
         formData.append("file", {
@@ -253,14 +255,12 @@ const DocumentPage = () => {
       }
   
       const token = await AsyncStorage.getItem("userToken");
-  
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour soumettre une demande.");
+        showToast("error", "Vous devez être connecté pour soumettre une demande.");
         setSubmitting(false);
         return;
       }
   
-      // Send the request to the server
       const response = await axios.post(
         `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-document/create`,
         formData,
@@ -271,20 +271,23 @@ const DocumentPage = () => {
           },
         },
       );
-  
+      
+      showToast("success", "Demande de document soumise avec succès!", true);
+
       if (response.status === 200) {
-        displayToast("success", "Demande de document soumise avec succès!");
+        showToast("success", "Demande de document soumise avec succès!", true);
+  
         // Reset form
         setObjet("");
-        setFile(null); // Clear the file
-        // Reset document types
+        setFile(null);
         setDocumentTypes(
           documentTypes.map((type, index) => ({
             ...type,
             selected: index === 0,
           })),
         );
-        // Navigate back to home after a short delay
+  
+        // Navigate back after a short delay
         setTimeout(() => {
           navigation.navigate("AccueilCollaborateur");
         }, 1500);
@@ -292,17 +295,17 @@ const DocumentPage = () => {
     } catch (error) {
       console.error("Error submitting form:", error);
       if (axios.isAxiosError(error)) {
-        console.error("Server Response:", error.response?.data);
-        displayToast("error", error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
+        showToast("error", error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
       } else if (error instanceof Error) {
-        displayToast("error", error.message);
+        showToast("error", error.message);
       } else {
-        displayToast("error", "Une erreur inconnue est survenue.");
+        showToast("error", "Une erreur inconnue est survenue.");
       }
     } finally {
       setSubmitting(false);
     }
   };
+  
 
   return (
     <SidebarLayout title="Demande de document">
@@ -314,7 +317,7 @@ const DocumentPage = () => {
         {/* Form Header */}
         <View style={[styles.formHeader, themeStyles.card]}>
           <View style={styles.formHeaderIcon}>
-            <FileText size={24} color={isDarkMode ? "#0e135f" : "#0e135f"} />
+            <FileText size={24} color={isDarkMode ? "#CCCCCC" : "#0e135f"} />
           </View>
           <View style={styles.formHeaderContent}>
             <Text style={[styles.formHeaderTitle, themeStyles.text]}>Nouvelle demande de document</Text>
@@ -335,7 +338,7 @@ const DocumentPage = () => {
               style={[styles.inputContainer, themeStyles.inputContainer]}
               onPress={openDocumentTypeModal}
             >
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.text]}>
                 {getSelectedDocumentType()}
               </Text>
@@ -349,7 +352,7 @@ const DocumentPage = () => {
               Objet de la demande <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.textAreaContainer, themeStyles.inputContainer]}>
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textArea, themeStyles.text]}
                 multiline
@@ -366,7 +369,7 @@ const DocumentPage = () => {
           <View style={styles.formGroup}>
             <Text style={[styles.label, themeStyles.text]}>Pièce jointe (optionnel)</Text>
             <TouchableOpacity style={[styles.inputContainer, themeStyles.inputContainer]} onPress={handleFileUpload}>
-              <Paperclip size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Paperclip size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.subtleText]}>
                 {file ? file.name : "Sélectionner un fichier"}
               </Text>
@@ -471,27 +474,19 @@ const DocumentPage = () => {
         </Modal>
       </ScrollView>
 
-      {/* Toast Message */}
-      {showToast && (
-        <View
-          style={[
-            styles.toast,
-            toastType === "success" ? styles.toastSuccess : styles.toastError,
-            { bottom: 70 }, // Position above footer
-          ]}
-        >
-          {toastType === "success" ? <CheckCircle size={20} color="#FFFFFF" /> : <XCircle size={20} color="#FFFFFF" />}
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      )}
-
       {/* Footer */}
       <Footer />
+
+      {/* Toast Message */}
+      <Toast />
+
     </SidebarLayout>
   )
 }
 
 const styles = StyleSheet.create({
+
+
   container: {
     flex: 1,
   },
@@ -636,7 +631,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0e135f",
+    backgroundColor: "#181E33",
     borderRadius: 8,
     paddingVertical: 14,
     marginTop: 8,
@@ -652,38 +647,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  toast: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  toastSuccess: {
-    backgroundColor: "#4CAF50",
-  },
-  toastError: {
-    backgroundColor: "#F44336",
-  },
-  toastText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-    marginLeft: 8,
-    flex: 1,
-  },
+ 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgb(18, 16, 36)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -790,11 +757,11 @@ const lightStyles = StyleSheet.create({
 
 const darkStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#121212",
+    backgroundColor: "#1a1f38",
   },
   header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderBottomColor: "#2D2F3DFA",
   },
   text: {
     color: "#E0E0E0",
@@ -803,20 +770,20 @@ const darkStyles = StyleSheet.create({
     color: "#AAAAAA",
   },
   card: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderColor: "#2D2F3DFA",
     borderWidth: 1,
     shadowColor: "transparent",
   },
   inputContainer: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderColor: "#2D2F3DFA",
   },
   noteContainer: {
     backgroundColor: "rgba(255, 193, 7, 0.05)",
   },
   modalItem: {
-    borderBottomColor: "#333333",
+    borderBottomColor: "#2D2F3DFA",
   },
 })
 

@@ -1,105 +1,150 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ColorValue } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Home, User, FileText, Bell, Plus } from "lucide-react-native";
-import { useTheme } from "../ThemeContext";
+import { Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native"
+import { useNavigation, useRoute } from "@react-navigation/native"
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import { LinearGradient } from "expo-linear-gradient"
+import { Feather } from "@expo/vector-icons"
+import { useEffect, useState } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
-const { width } = Dimensions.get("window");
+const { width } = Dimensions.get("window")
 
 type RootStackParamList = {
-  AccueilCollaborateur: undefined;
-  Demandestot: undefined;
-  AjouterDemande: undefined;
-  Notifications: undefined;
-  Profile: undefined;
-};
+  AccueilCollaborateur: undefined
+  Demandestot: undefined
+  AjouterDemande: undefined
+  Calendar: undefined
+  Profile: undefined
+}
 
-type FooterNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type FooterNavigationProp = NativeStackNavigationProp<RootStackParamList>
 
 const Footer = () => {
-  const navigation = useNavigation<FooterNavigationProp>();
-  const route = useRoute();
-  const { isDarkMode } = useTheme(); // Use the theme context
-
+  const navigation = useNavigation<FooterNavigationProp>()
+  const route = useRoute()
+  const [isDarkMode, setIsDarkMode] = useState(false)
 
   // Get current route name
-  const currentRoute = route.name;
+  const currentRoute = route.name
 
-  // Apply theme styles
-  const themeStyles = isDarkMode ? darkStyles : lightStyles;
+  // Load theme preference and set up polling for changes
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        // Use the standard 'theme' key instead of '@theme_mode'
+        const storedTheme = await AsyncStorage.getItem("theme")
+        const newIsDarkMode = storedTheme === "dark"
+        if (isDarkMode !== newIsDarkMode) {
+          console.log("Footer theme updated:", storedTheme)
+          setIsDarkMode(newIsDarkMode)
+        }
+      } catch (error) {
+        console.error("Error loading theme in Footer:", error)
+      }
+    }
+
+    // Load theme immediately
+    loadTheme()
+
+    // Set up polling to check for theme changes every 500ms
+    const themeCheckInterval = setInterval(loadTheme, 500)
+
+    return () => {
+      clearInterval(themeCheckInterval)
+    }
+  }, [isDarkMode])
 
   // Navigation items
   const navigationItems = [
     {
       name: "AccueilCollaborateur",
       label: "Accueil",
-      icon: (active: boolean) => <Home size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+      icon: "home",
     },
     {
       name: "Demandestot",
       label: "Demandes",
-      icon: (active: boolean) => <FileText size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+      icon: "file-text",
     },
     {
       name: "AjouterDemande",
       label: "Ajouter",
-      icon: (active: boolean) => (
-        <View style={[styles.addButtonContainer, themeStyles.addButtonContainer]}>
-          <Plus size={22} color={themeStyles.addButtonIconColor} />
-        </View>
-      ),
+      icon: "plus-circle",
       special: true,
     },
     {
-      name: "Notifications",
-      label: "Notifications",
-      icon: (active: boolean) => <Bell size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+      name: "Calendar",
+      label: "Calendar",
+      icon: "calendar",
     },
     {
       name: "Profile",
       label: "Profil",
-      icon: (active: boolean) => <User size={22} color={active ? "#0e135f" : themeStyles.iconColor} />,
+      icon: "user",
     },
-  ];
+  ]
 
   return (
-    <View style={[styles.container, themeStyles.container]}>
+    <LinearGradient
+      colors={isDarkMode ? ["#1a1f38", "#2d3a65"] : ["#f0f4f8", "#e2eaf2"]}
+      start={{ x: 0.1, y: 0.1 }}
+      end={{ x: 0.9, y: 0.9 }}
+      style={styles.footer}
+    >
       {navigationItems.map((item) => (
         <TouchableOpacity
           key={item.name}
-          style={[
-            styles.navItem,
-            item.special && styles.specialNavItem,
-            currentRoute === item.name && styles.activeNavItem,
-          ]}
+          style={[styles.navItem, item.special && styles.specialNavItem]}
           onPress={() => navigation.navigate(item.name)}
           activeOpacity={0.7}
         >
-          {item.icon(currentRoute === item.name)}
-          {!item.special && (
-            <Text
-              style={[
-                styles.navLabel,
-                themeStyles.navLabel,
-                currentRoute === item.name && styles.activeNavLabel,
-                currentRoute === item.name && themeStyles.activeNavLabel,
-              ]}
+          {item.special ? (
+            <LinearGradient
+              colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.addButtonContainer}
             >
-              {item.label}
-            </Text>
+              <Feather name={item.icon} size={24} color="#FFFFFF" />
+            </LinearGradient>
+          ) : (
+            <>
+              <Feather
+                name={item.icon}
+                size={22}
+                color={
+                  currentRoute === item.name ? (isDarkMode ? "#B388FF" : "#0e135f") : isDarkMode ? "#AAAAAA" : "#757575"
+                }
+              />
+              <Text
+                style={[
+                  styles.navLabel,
+                  currentRoute === item.name
+                    ? isDarkMode
+                      ? styles.activeNavLabelDark
+                      : styles.activeNavLabelLight
+                    : isDarkMode
+                      ? styles.textLight
+                      : styles.textDark,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </>
           )}
         </TouchableOpacity>
       ))}
-    </View>
-  );
-};
+    </LinearGradient>
+  )
+}
+
 const styles = StyleSheet.create({
-  container: {
+  footer: {
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
     position: "absolute",
     bottom: 0,
     left: 0,
@@ -115,16 +160,17 @@ const styles = StyleSheet.create({
   specialNavItem: {
     marginBottom: 20,
   },
-  activeNavItem: {
-    // Active styles applied through text and icon colors
-  },
   navLabel: {
     fontSize: 12,
     marginTop: 4,
   },
-  activeNavLabel: {
+  activeNavLabelLight: {
     fontWeight: "600",
     color: "#0e135f",
+  },
+  activeNavLabelDark: {
+    fontWeight: "600",
+    color: "#B388FF",
   },
   addButtonContainer: {
     width: 48,
@@ -134,47 +180,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
-});
-
-// Define theme-specific styles
-const lightStyles = {
-  container: {
-    backgroundColor: "#FFFFFF",
-    borderTopColor: "#EEEEEE",
-  },
-  navLabel: {
-    color: "#757575",
-  },
-  activeNavLabel: {
-    color: "#0e135f",
-  },
-  addButtonContainer: {
-    backgroundColor: "#0e135f",
-  },
-  addButtonIconColor: "#FFFFFF" as ColorValue,
-  iconColor: "#757575" as ColorValue,
-};
-
-const darkStyles = {
-  container: {
-    backgroundColor: "#1E1E1E",
-    borderTopColor: "#333333",
-  },
-  navLabel: {
+  textLight: {
     color: "#AAAAAA",
   },
-  activeNavLabel: {
-    color: "#B388FF",
+  textDark: {
+    color: "#757575",
   },
-  addButtonContainer: {
-    backgroundColor: "#B388FF",
-  },
-  addButtonIconColor: "#1E1E1E" as ColorValue,
-  iconColor: "#AAAAAA" as ColorValue,
-};
+})
 
-export default Footer;
+export default Footer
+

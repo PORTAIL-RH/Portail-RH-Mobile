@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import {
   View,
   Text,
@@ -9,28 +9,20 @@ import {
   TouchableOpacity,
   useColorScheme,
   Dimensions,
+  Platform,
+  StatusBar,
+  RefreshControl,
 } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import {
-  Bell,
-  Calendar,
-  FileText,
-  LogOut,
-  Moon,
-  Sun,
-  User,
-  Clock,
-  ChevronRight,
-  PlusCircle,
-  CheckCircle,
-  XCircle,
-  BarChart3,
-} from "lucide-react-native"
 import Navbar from "../Components/NavBar"
 import Footer from "../Components/Footer"
 import { API_CONFIG } from "../config/apiConfig"
+import { LinearGradient } from "expo-linear-gradient"
+import { Feather } from "@expo/vector-icons"
+import useApiPooling from "../useApiPooling"
+
 // Définir les types de navigation
 export type RootStackParamList = {
   AccueilCollaborateur: undefined
@@ -41,6 +33,7 @@ export type RootStackParamList = {
   Autorisation: undefined
   AjouterDemande: undefined
   Calendar: undefined
+  Statistics: undefined
 }
 
 // Définir le type de navigation
@@ -51,29 +44,267 @@ const { width } = Dimensions.get("window")
 // Définir le type pour le statut des demandes
 type RequestStatus = "approved" | "rejected" | "pending"
 
+// Type pour les statistiques
+type Stats = {
+  approved: number
+  rejected: number
+  pending: number
+}
+
+// Type pour les demandes récentes
+type RecentRequest = {
+  id: string
+  title: string
+  description: string
+  status: RequestStatus
+  date: string
+  time: string
+  startDate?: string
+  endDate?: string
+}
+
+// Type pour les informations utilisateur
+type UserInfo = {
+  id: string
+  nom: string
+  role: string
+}
+
+// Type pour la réponse combinée des stats
+type StatsResponse = {
+  stats: Stats
+  recentRequests: RecentRequest[]
+  upcomingTrainings: RecentRequest[]
+}
+
+// Background Component
+const BackgroundGradient = ({ isDarkMode }: { isDarkMode: boolean }) => {
+  return (
+    <View style={styles.backgroundContainer}>
+      <LinearGradient
+        colors={isDarkMode ? ["#1a1f38", "#2d3a65", "#1a1f38"] : ["#f0f4f8", "#e2eaf2", "#f0f4f8"]}
+        start={{ x: 0.1, y: 0.1 }}
+        end={{ x: 0.9, y: 0.9 }}
+        style={styles.backgroundGradient}
+      />
+    </View>
+  )
+}
+
 const AccueilCollaborateur = () => {
   const navigation = useNavigation<AccueilCollaborateurNavigationProp>()
   const systemColorScheme = useColorScheme()
   const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark")
   const [userName, setUserName] = useState("")
   const [userRole, setUserRole] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [userToken, setUserToken] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [userInfoLocal, setUserInfoLocal] = useState<any>(null)
+  const [stableStatsData, setStableStatsData] = useState<StatsResponse | null>(null)
+  const [stableUserData, setStableUserData] = useState<{ nom: string; role: string } | null>(null)
+  const [dataVersion, setDataVersion] = useState(0)
 
-  // Charger les préférences de thème et les informations de l'utilisateur au montage du composant
+  // Utiliser useApiPooling pour les statistiques et les demandes récentes
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    refresh: refreshStats,
+  } = useApiPooling<StatsResponse>({
+    apiCall: async () => {
+      const userInfoStr = await AsyncStorage.getItem("userInfo")
+      const token = await AsyncStorage.getItem("userToken")
+    
+      if (!userInfoStr || !token) {
+        throw new Error("Informations utilisateur non disponibles")
+      }
+    
+      const parsedUser = JSON.parse(userInfoStr)
+      const userId = parsedUser.id
+    
+      if (!userId) {
+        throw new Error("ID utilisateur non disponible")
+      }
+    
+      const endpoints = [
+        `/api/demande-autorisation/personnel/${userId}`,
+        `/api/demande-conge/personnel/${userId}`,
+        `/api/demande-formation/personnel/${userId}`,
+        `/api/demande-pre-avance/personnel/${userId}`,
+        `/api/demande-document/personnel/${userId}`,
+      ]
+    
+      const responses = await Promise.all(
+        endpoints.map((endpoint) =>
+          fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+            .then((response) => {
+              if (!response.ok) {
+                console.warn(`Échec de la récupération depuis ${endpoint}`)
+                return []
+              }
+              return response.json()
+            })
+            .catch((error) => {
+              console.error(`Erreur lors de la récupération depuis ${endpoint}:`, error)
+              return []
+            }),
+        ),
+      )
+    
+      const allDemandes = responses.flat()
+    
+      // Compter les demandes par statut (tous types confondus)
+      let approved = 0
+      let rejected = 0
+      let pending = 0
+    
+      allDemandes.forEach((item) => {
+        if (item.reponseChef === "O") {
+          approved++
+        } else if (item.reponseChef === "N") {
+          rejected++
+        } else {
+          pending++
+        }
+      })
+
+      // Récupérer les demandes de formation approuvées
+      const formationsApprouvees = allDemandes
+      .filter(item => (item.titre || item.theme) && item.reponseChef === "O")
+      .map(item => {
+        const demandDate = new Date(item.dateDemande)
+        return {
+          id: item.id_libre_demande || item.id,
+          title: `Formation: ${item.theme || item.titre || "Sans titre"}`,
+          description: item.texteDemande || "Pas de description",
+          status: "approved" as const,
+          date: demandDate.toLocaleDateString("fr-FR"),
+          time: demandDate.toLocaleTimeString("fr-FR"),
+          startDate: item.dateDebut,
+          endDate: item.dateFin
+        }
+      })
+  
+
+      // Filtrer pour ne garder que les formations à venir
+      const formationsAVenir = formationsApprouvees.filter(formation => {
+        if (!formation.startDate) return false
+        const startDate = new Date(formation.startDate)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        return startDate >= today
+      })
+
+      return {
+        stats: {
+          approved,  // Total de toutes les demandes approuvées
+          rejected,  // Total de toutes les demandes rejetées
+          pending,   // Total de toutes les demandes en attente
+        },
+        recentRequests: [], // Nous n'affichons plus les demandes récentes
+        upcomingTrainings: formationsAVenir
+      }
+    },
+    storageKey: "user_stats_data",
+    poolingInterval: 120000,
+    initialData: { 
+      stats: { approved: 0, rejected: 0, pending: 0 }, 
+      recentRequests: [],
+      upcomingTrainings: []
+    },
+    dependsOnAuth: true,
+  })
+
+  // Utiliser useApiPooling pour les informations utilisateur
+  const {
+    data: userData,
+    loading: userLoading,
+    error: userError,
+    refresh: refreshUserData,
+  } = useApiPooling<{ nom: string; role: string }>({
+    apiCall: async () => {
+      const userInfoStr = await AsyncStorage.getItem("userInfo")
+      const token = await AsyncStorage.getItem("userToken")
+
+      if (!userInfoStr || !token) {
+        throw new Error("Informations utilisateur non disponibles")
+      }
+
+      const parsedUser = JSON.parse(userInfoStr)
+      const userId = parsedUser.id
+
+      if (!userId) {
+        throw new Error("ID utilisateur non disponible")
+      }
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Échec de la récupération des informations de l'utilisateur")
+      }
+
+      const data = await response.json()
+      return {
+        nom: data.nom || "Utilisateur",
+        role: data.role || "Collaborateur",
+      }
+    },
+    storageKey: "user_profile_data",
+    poolingInterval: 300000,
+    dependsOnAuth: true,
+  })
+
+  // Stabiliser les données
+  useEffect(() => {
+    if (statsData) {
+      const currentDataStr = JSON.stringify(statsData)
+      const stableDataStr = stableStatsData ? JSON.stringify(stableStatsData) : ""
+
+      if (currentDataStr !== stableDataStr) {
+        setStableStatsData(statsData)
+        setDataVersion((prev) => prev + 1)
+      }
+    }
+
+    if (userData) {
+      const currentDataStr = JSON.stringify(userData)
+      const stableDataStr = stableUserData ? JSON.stringify(stableUserData) : ""
+
+      if (currentDataStr !== stableDataStr) {
+        setStableUserData(userData)
+        setDataVersion((prev) => prev + 1)
+      }
+    }
+  }, [statsData, userData, stableStatsData, stableUserData])
+
+  // Charger les préférences de thème et les informations de l'utilisateur
   useEffect(() => {
     const loadData = async () => {
       await loadThemePreference()
-      await getUserInfo()
+      await loadUserInfoFromStorage()
     }
     loadData()
   }, [])
 
-  // Charger les préférences de thème depuis AsyncStorage
+  // Refresh data when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      refreshStats()
+      refreshUserData()
+      return () => {}
+    }, [refreshStats, refreshUserData]),
+  )
+
   const loadThemePreference = async () => {
     try {
-      const storedTheme = await AsyncStorage.getItem("@theme_mode")
+      const storedTheme = await AsyncStorage.getItem("theme")
       if (storedTheme !== null) {
         setIsDarkMode(storedTheme === "dark")
       }
@@ -82,56 +313,38 @@ const AccueilCollaborateur = () => {
     }
   }
 
-  // Basculer entre le mode sombre et le mode clair
+  const loadUserInfoFromStorage = async () => {
+    try {
+      const userInfoStr = await AsyncStorage.getItem("userInfo")
+      if (userInfoStr) {
+        const parsedInfo = JSON.parse(userInfoStr)
+        setUserInfoLocal(parsedInfo)
+        setUserName(parsedInfo.nom || "Utilisateur")
+        setUserRole(parsedInfo.role || "Collaborateur")
+
+        if (!stableUserData) {
+          setStableUserData({
+            nom: parsedInfo.nom || "Utilisateur",
+            role: parsedInfo.role || "Collaborateur",
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error loading user info from storage:", error)
+    }
+  }
+
   const toggleTheme = useCallback(async () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)
     try {
+      await AsyncStorage.setItem("theme", newTheme)
       await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
       console.error("Erreur lors de la sauvegarde des préférences de thème:", error)
     }
   }, [isDarkMode])
 
-  // Récupérer les informations de l'utilisateur et les demandes
-  const getUserInfo = async () => {
-    try {
-      const userInfo = await AsyncStorage.getItem("userInfo")
-      const token = await AsyncStorage.getItem("userToken")
-
-      if (userInfo && token) {
-        const parsedUser = JSON.parse(userInfo)
-        setUserId(parsedUser.id)
-        setUserToken(token)
-
-        // Récupérer les informations de l'utilisateur
-        const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${parsedUser.id}`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error("Échec de la récupération des informations de l'utilisateur")
-        }
-
-        const data = await response.json()
-        setUserName(data.nom || "Utilisateur")
-        setUserRole(data.role || "Collaborateur")
-
-        
-      } else {
-        throw new Error("Informations de l'utilisateur ou token manquants")
-      }
-    } catch (error) {
-      console.error("Erreur lors de la récupération des informations de l'utilisateur:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  // Gérer la déconnexion
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem("userInfo")
@@ -142,186 +355,333 @@ const AccueilCollaborateur = () => {
     }
   }
 
-  // Appliquer les styles en fonction du thème
-  const themeStyles = isDarkMode ? darkStyles : lightStyles
+  const displayStatsData = useMemo(() => {
+    return (
+      stableStatsData || {
+        stats: { approved: 0, rejected: 0, pending: 0 },
+        recentRequests: [],
+        upcomingTrainings: []
+      }
+    )
+  }, [stableStatsData, dataVersion])
 
+  const displayUserData = useMemo(() => {
+    return (
+      stableUserData || {
+        nom: userName,
+        role: userRole,
+      }
+    )
+  }, [stableUserData, userName, userRole, dataVersion])
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true)
+    Promise.all([refreshUserData(true), refreshStats(true)]).finally(() => {
+      setRefreshing(false)
+    })
+  }, [refreshUserData, refreshStats])
+
+  const getStatusColor = (status: RequestStatus) => {
+    switch (status) {
+      case "approved":
+        return "#4CAF50"
+      case "rejected":
+        return "#F44336"
+      case "pending":
+        return "#FF9800"
+      default:
+        return "#757575"
+    }
+  }
+
+  const getStatusIcon = (status: RequestStatus) => {
+    switch (status) {
+      case "approved":
+        return <Feather name="check-circle" size={16} color="#fff" />
+      case "rejected":
+        return <Feather name="x-circle" size={16} color="#fff" />
+      case "pending":
+        return <Feather name="clock" size={16} color="#fff" />
+      default:
+        return null
+    }
+  }
+
+  const getStatusText = (status: RequestStatus) => {
+    switch (status) {
+      case "approved":
+        return "Approuvée"
+      case "rejected":
+        return "Rejetée"
+      case "pending":
+        return "En attente"
+      default:
+        return ""
+    }
+  }
+
+  const isLoading = userLoading && statsLoading && !userInfoLocal
 
   return (
-    <SafeAreaView style={[styles.container, themeStyles.container]}>
-      <Navbar
-        isDarkMode={isDarkMode}
-        toggleTheme={toggleTheme} // Passer toggleTheme ici
-        handleLogout={handleLogout}
-      />
+    <SafeAreaView style={[styles.safeArea, isDarkMode ? styles.darkBackground : styles.lightBackground]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-      {/* Contenu */}
+      <BackgroundGradient isDarkMode={isDarkMode} />
+
+      <Navbar isDarkMode={isDarkMode} toggleTheme={toggleTheme} handleLogout={handleLogout} />
+
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {loading ? (
+        {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0e135f" />
+            <ActivityIndicator size="large" color={isDarkMode ? "#ffffff" : "#0e135f"} />
           </View>
         ) : (
-          <>
+          <View>
             {/* Section de bienvenue */}
-            <View style={[styles.welcomeContainer, themeStyles.card]}>
-              <View style={styles.welcomeContent}>
-                <Text style={[styles.welcomeText, themeStyles.subtleText]}>Bienvenue,</Text>
-                <Text style={[styles.userName, themeStyles.text]}>{userName}</Text>
-                <Text style={[styles.userRole, themeStyles.subtleText]}>{userRole}</Text>
+            <View style={styles.welcomeContainer}>
+              <View style={[styles.welcomeCard, isDarkMode ? styles.cardDark : styles.cardLight]}>
+                <View style={styles.welcomeContent}>
+                  <Text style={[styles.welcomeText, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                    Bienvenue,
+                  </Text>
+                  <Text style={[styles.userName, isDarkMode ? styles.textLight : styles.textDark, styles.gradientText]}>
+                    {displayUserData?.nom || userName}
+                  </Text>
+                  <Text style={[styles.userRole, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                    {displayUserData?.role || userRole}
+                  </Text>
 
-                <TouchableOpacity
-                  style={[styles.calendarButton, themeStyles.calendarButton]}
-                  onPress={() => navigation.navigate("Calendar")}
-                >
-                  <Calendar size={16} color={isDarkMode ? "#E0E0E0" : "#333"} />
-                  <Text style={[styles.calendarButtonText, themeStyles.text]}>Mon calendrier</Text>
-                </TouchableOpacity>
+                
+                </View>
+
+                <View style={styles.avatarContainer}>
+                  <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+                    <View style={[styles.userAvatar, isDarkMode ? styles.userAvatarDark : styles.userAvatarLight]}>
+                      <Feather name="user" size={40} color={isDarkMode ? "#E0E0E0" : "#0e135f"} />
+                    </View>
+                    <View style={[styles.avatarBadge, { backgroundColor: "#4CAF50" }]} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
+            {/* Statistiques */}
+            <View style={styles.sectionContainer}>
+              <Text style={[styles.sectionTitle, isDarkMode ? styles.textLight : styles.textDark, styles.gradientText]}>
+                Mes statistiques
+              </Text>
 
+              <View style={styles.statsRow}>
+                {/* Approved Stats */}
+                <View style={[styles.statCard, isDarkMode ? styles.cardDark : styles.cardLight]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: "#4CAF50" }]}>
+                    <Feather name="check-circle" size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.statValue, isDarkMode ? styles.textLight : styles.textDark]}>
+                    {displayStatsData?.stats.approved || 0}
+                  </Text>
+                  <Text style={[styles.statLabel, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                    Approuvées
+                  </Text>
+                </View>
+
+                {/* Rejected Stats */}
+                <View style={[styles.statCard, isDarkMode ? styles.cardDark : styles.cardLight]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: "#F44336" }]}>
+                    <Feather name="x-circle" size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.statValue, isDarkMode ? styles.textLight : styles.textDark]}>
+                    {displayStatsData?.stats.rejected || 0}
+                  </Text>
+                  <Text style={[styles.statLabel, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                    Rejetées
+                  </Text>
+                </View>
+
+                {/* Pending Stats */}
+                <View style={[styles.statCard, isDarkMode ? styles.cardDark : styles.cardLight]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: "#FF9800" }]}>
+                    <Feather name="clock" size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.statValue, isDarkMode ? styles.textLight : styles.textDark]}>
+                    {displayStatsData?.stats.pending || 0}
+                  </Text>
+                  <Text style={[styles.statLabel, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                    En attente
+                  </Text>
+                </View>
+              </View>
+            </View>
 
             {/* Actions rapides */}
             <View style={styles.sectionContainer}>
-              <Text style={[styles.sectionTitle, themeStyles.text]}>Actions rapides</Text>
+              <Text style={[styles.sectionTitle, isDarkMode ? styles.textLight : styles.textDark, styles.gradientText]}>
+                Actions rapides
+              </Text>
 
               <View style={styles.actionsGrid}>
+                {/* Nouvelle demande */}
                 <TouchableOpacity
-                  style={[styles.actionCard, themeStyles.card]}
+                  style={[styles.actionCard, isDarkMode ? styles.cardDark : styles.cardLight]}
                   onPress={() => navigation.navigate("AjouterDemande")}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.actionIconContainer, { backgroundColor: "#0e135f" }]}>
-                    <PlusCircle size={24} color="#fff" />
-                  </View>
+                  <LinearGradient
+                    colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionIconGradient}
+                  >
+                    <Feather name="plus-circle" size={24} color="#fff" />
+                  </LinearGradient>
                   <View style={styles.actionCardContent}>
-                    <Text style={[styles.actionCardTitle, themeStyles.text]}>Nouvelle demande</Text>
-                    <Text style={[styles.actionCardSubtitle, themeStyles.subtleText]}>
+                    <Text style={[styles.actionCardTitle, isDarkMode ? styles.textLight : styles.textDark]}>
+                      Nouvelle demande
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionCardSubtitle,
+                        isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                      ]}
+                    >
                       Créer une demande
                     </Text>
                   </View>
-                  <ChevronRight size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+                  <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
                 </TouchableOpacity>
 
+                {/* Mes demandes */}
                 <TouchableOpacity
-                  style={[styles.actionCard, themeStyles.card]}
+                  style={[styles.actionCard, isDarkMode ? styles.cardDark : styles.cardLight]}
                   onPress={() => navigation.navigate("Demandestot")}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.actionIconContainer, { backgroundColor: "#4CAF50" }]}>
-                    <FileText size={24} color="#fff" />
-                  </View>
+                  <LinearGradient
+                    colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionIconGradient}
+                  >
+                    <Feather name="file-text" size={24} color="#fff" />
+                  </LinearGradient>
                   <View style={styles.actionCardContent}>
-                    <Text style={[styles.actionCardTitle, themeStyles.text]}>Mes demandes</Text>
-                    <Text style={[styles.actionCardSubtitle, themeStyles.subtleText]}>
+                    <Text style={[styles.actionCardTitle, isDarkMode ? styles.textLight : styles.textDark]}>
+                      Mes demandes
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionCardSubtitle,
+                        isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                      ]}
+                    >
                       Voir toutes
                     </Text>
                   </View>
-                  <ChevronRight size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+                  <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionCard, themeStyles.card]}
-                  onPress={() => navigation.navigate("Calendar")}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.actionIconContainer, { backgroundColor: "#2196F3" }]}>
-                    <Calendar size={24} color="#fff" />
-                  </View>
-                  <View style={styles.actionCardContent}>
-                    <Text style={[styles.actionCardTitle, themeStyles.text]}>Calendrier</Text>
-                    <Text style={[styles.actionCardSubtitle, themeStyles.subtleText]}>
-                      Mes congés
-                    </Text>
-                  </View>
-                  <ChevronRight size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionCard, themeStyles.card]}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.actionIconContainer, { backgroundColor: "#FF9800" }]}>
-                    <BarChart3 size={24} color="#fff" />
-                  </View>
-                  <View style={styles.actionCardContent}>
-                    <Text style={[styles.actionCardTitle, themeStyles.text]}>Statistiques</Text>
-                    <Text style={[styles.actionCardSubtitle, themeStyles.subtleText]}>
-                      Mes activités
-                    </Text>
-                  </View>
-                  <ChevronRight size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                </TouchableOpacity>
+                
               </View>
             </View>
 
+            {/* Section Rappel de formations */}
+            {displayStatsData?.upcomingTrainings && displayStatsData.upcomingTrainings.length > 0 && (
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <Text
+                    style={[styles.sectionTitle, isDarkMode ? styles.textLight : styles.textDark, styles.gradientText]}
+                  >
+                    Mes formations à venir
+                  </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate("Demandestot")}>
+                    <LinearGradient
+                      colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.viewAllButton}
+                    >
+                      <Text style={styles.viewAllButtonText}>Voir tout</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
 
-          </>
+                <View style={styles.requestsContainer}>
+                  {displayStatsData.upcomingTrainings.map((training) => (
+                    <TouchableOpacity
+                      key={training.id}
+                      style={[
+                        styles.requestCard,
+                        isDarkMode ? styles.cardDark : styles.cardLight,
+                        { borderLeftWidth: 4, borderLeftColor: getStatusColor(training.status) },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.requestCardHeader}>
+                        <View style={styles.requestStatusContainer}>
+                          <View
+                            style={[styles.statusIconContainer, { backgroundColor: getStatusColor(training.status) }]}
+                          >
+                            {getStatusIcon(training.status)}
+                          </View>
+                          <Text style={[styles.requestStatusText, { color: getStatusColor(training.status) }]}>
+                            {getStatusText(training.status)}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.requestDate,
+                            isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                          ]}
+                        >
+                          {training.startDate ? new Date(training.startDate).toLocaleDateString("fr-FR") : "Date inconnue"}
+                          {training.endDate && ` - ${new Date(training.endDate).toLocaleDateString("fr-FR")}`}
+                        </Text>
+                      </View>
+                      <Text style={[styles.requestTitle, isDarkMode ? styles.textLight : styles.textDark]}>
+                        {training.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.requestDescription,
+                          isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                        ]}
+                      >
+                        {training.description}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
 
-      {/* Pied de page */}
       <Footer />
     </SafeAreaView>
   )
 }
 
-// Styles
 const styles = StyleSheet.create({
-  container: {
+  backgroundContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  backgroundGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+  darkBackground: {
+    backgroundColor: "#1a1f38",
   },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconButton: {
-    padding: 8,
-    borderRadius: 20,
-    marginLeft: 8,
-    position: "relative",
-  },
-  profileButton: {
-    padding: 8,
-    borderRadius: 20,
-    marginLeft: 8,
-    borderWidth: 1,
-  },
-  badge: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-    backgroundColor: "#FF5252",
-    borderRadius: 10,
-    width: 16,
-    height: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  badgeText: {
-    color: "white",
-    fontSize: 10,
-    fontWeight: "bold",
+  lightBackground: {
+    backgroundColor: "#f0f4f8",
   },
   scrollContainer: {
     padding: 16,
@@ -334,12 +694,15 @@ const styles = StyleSheet.create({
     height: 300,
   },
   welcomeContainer: {
+    marginBottom: 24,
+  },
+  welcomeCard: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
     borderRadius: 16,
-    marginBottom: 16,
+    borderWidth: 1,
   },
   welcomeContent: {
     flex: 1,
@@ -356,38 +719,94 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
   },
-  calendarButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 8,
+
+  buttonLight: {
+    backgroundColor: "#F5F5F5",
+    borderColor: "#EEEEEE",
   },
-  calendarButtonText: {
+  buttonDark: {
+    backgroundColor: "#2A2A2A",
+    borderColor: "#333333",
+  },
+  buttonIcon: {
+    marginRight: 6,
+  },
+  buttonText: {
     fontSize: 12,
     fontWeight: "500",
-    marginLeft: 6,
+  },
+  avatarContainer: {
+    position: "relative",
   },
   userAvatar: {
     width: 70,
     height: 70,
     borderRadius: 35,
     borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  userAvatarLight: {
     borderColor: "#191970",
+    backgroundColor: "rgba(14, 19, 95, 0.1)",
+  },
+  userAvatarDark: {
+    borderColor: "#E0E0E0",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  avatarBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  sectionContainer: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 16,
+  },
+  viewAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  viewAllButtonText: {
+    color: "#fff",
+    fontWeight: "500",
+    fontSize: 12,
   },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: 16,
   },
   statCard: {
     width: (width - 48) / 3,
     padding: 16,
     borderRadius: 16,
     alignItems: "center",
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+    }),
   },
   statIconContainer: {
     width: 44,
@@ -406,24 +825,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
   },
-  sectionContainer: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 12,
-  },
-  viewAllText: {
-    color: "#0e135f",
-    fontWeight: "500",
-  },
   actionsGrid: {
     gap: 12,
   },
@@ -432,9 +833,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderRadius: 16,
-    marginBottom: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+    }),
   },
-  actionIconContainer: {
+  actionIconGradient: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -459,9 +869,18 @@ const styles = StyleSheet.create({
   requestCard: {
     padding: 16,
     borderRadius: 16,
-    marginBottom: 8,
+    marginBottom: 12,
     position: "relative",
     overflow: "hidden",
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+    }),
   },
   requestCardHeader: {
     flexDirection: "row",
@@ -473,6 +892,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  statusIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
   requestStatusText: {
     fontSize: 14,
@@ -489,97 +915,30 @@ const styles = StyleSheet.create({
   requestDescription: {
     fontSize: 14,
   },
-  requestStatusBar: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
+  cardLight: {
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderColor: "rgba(255, 255, 255, 0.5)",
   },
-  logoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 14,
-    borderRadius: 16,
-    marginTop: 16,
-    borderWidth: 1,
+  cardDark: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: "rgba(255, 255, 255, 0.18)",
   },
-  logoutText: {
-    marginLeft: 8,
-    fontWeight: "500",
+  textLight: {
+    color: "white",
   },
-})
-
-// Styles pour le mode clair
-const lightStyles = StyleSheet.create({
-  container: {
-    backgroundColor: "#F5F5F5",
+  textDark: {
+    color: "#1a1f38",
   },
-  header: {
-    backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
+  textLightSecondary: {
+    color: "rgba(255, 255, 255, 0.7)",
   },
-  text: {
-    color: "#333333",
+  textDarkSecondary: {
+    color: "rgba(26, 31, 56, 0.7)",
   },
-  subtleText: {
-    color: "#757575",
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  profileButton: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#EEEEEE",
-  },
-  calendarButton: {
-    backgroundColor: "#F5F5F5",
-    borderColor: "#EEEEEE",
-  },
-  logoutButton: {
-    backgroundColor: "#F5F5F5",
-    borderColor: "#DDDDDD",
-  },
-})
-
-// Styles pour le mode sombre
-const darkStyles = StyleSheet.create({
-  container: {
-    backgroundColor: "#121212",
-  },
-  header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
-  },
-  text: {
-    color: "#E0E0E0",
-  },
-  subtleText: {
-    color: "#AAAAAA",
-  },
-  card: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
-    borderWidth: 1,
-    shadowColor: "transparent",
-  },
-  profileButton: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
-  },
-  calendarButton: {
-    backgroundColor: "#2A2A2A",
-    borderColor: "#333333",
-  },
-  logoutButton: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+  gradientText: {
+    textShadowColor: "rgba(56, 189, 248, 0.5)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
   },
 })
 

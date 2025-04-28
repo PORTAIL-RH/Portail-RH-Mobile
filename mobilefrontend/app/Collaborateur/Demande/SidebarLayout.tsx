@@ -47,7 +47,7 @@ const SidebarLayout = ({ children, title }: SidebarLayoutProps) => {
   useEffect(() => {
     const loadThemePreference = async () => {
       try {
-        const storedTheme = await AsyncStorage.getItem("@theme_mode")
+        const storedTheme = await AsyncStorage.getItem("theme")
         if (storedTheme !== null) {
           setIsDarkMode(storedTheme === "dark")
         }
@@ -59,16 +59,7 @@ const SidebarLayout = ({ children, title }: SidebarLayoutProps) => {
     loadThemePreference()
   }, [])
 
-  // Toggle theme between light and dark mode
-  const toggleTheme = async () => {
-    const newTheme = isDarkMode ? "light" : "dark"
-    setIsDarkMode(!isDarkMode)
-    try {
-      await AsyncStorage.setItem("@theme_mode", newTheme)
-    } catch (error) {
-      console.error("Error saving theme preference:", error)
-    }
-  }
+ 
 
   // Toggle sidebar
   const toggleSidebar = () => {
@@ -178,15 +169,7 @@ const SidebarLayout = ({ children, title }: SidebarLayoutProps) => {
           </TouchableOpacity>
           <Text style={[styles.headerTitle, themeStyles.text]}>{title}</Text>
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={[styles.themeToggle, themeStyles.themeToggle]} onPress={toggleTheme}>
-            {isDarkMode ? (
-              <Sun size={18} color={themeStyles.themeToggleIcon.color} />
-            ) : (
-              <Moon size={18} color={themeStyles.themeToggleIcon.color} />
-            )}
-          </TouchableOpacity>
-        </View>
+        
       </View>
 
       {/* Sidebar */}
@@ -281,8 +264,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 40,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
     zIndex: 10,
   },
   headerLeft: {
@@ -302,18 +292,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  themeToggle: {
-    padding: 8,
-    borderRadius: 20,
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+
+
   sidebar: {
     position: "absolute",
     top: 0,
@@ -458,12 +438,7 @@ const lightStyles = StyleSheet.create({
   menuButton: {
     backgroundColor: "#F1F3F5",
   },
-  themeToggle: {
-    backgroundColor: "#F1F3F5",
-  },
-  themeToggleIcon: {
-    color: "#495057",
-  },
+
   sidebar: {
     backgroundColor: "#FFFFFF",
     borderRightColor: "#E9ECEF",
@@ -539,11 +514,11 @@ const lightStyles = StyleSheet.create({
 
 const darkStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#121212",
+    backgroundColor: "#1a1f38",
   },
   header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderBottomColor: "#3a4a7a",
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -554,17 +529,12 @@ const darkStyles = StyleSheet.create({
     color: "#E0E0E0",
   },
   menuButton: {
-    backgroundColor: "#333333",
+    backgroundColor: "#3a4a7a",
   },
-  themeToggle: {
-    backgroundColor: "#333333",
-  },
-  themeToggleIcon: {
-    color: "#E0E0E0",
-  },
+
   sidebar: {
-    backgroundColor: "#1E1E1E",
-    borderRightColor: "#333333",
+    backgroundColor: "#1F2846",
+    borderRightColor: "#3a4a7a",
     borderRightWidth: 1,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
@@ -573,12 +543,12 @@ const darkStyles = StyleSheet.create({
     elevation: 5,
   },
   sidebarHeader: {
-    borderBottomColor: "#333333",
-    backgroundColor: "#252525",
+    borderBottomColor: "#3a4a7a",
+    backgroundColor: "#151C31",
   },
   sidebarTitleContainer: {
-    borderBottomColor: "#333333",
-    backgroundColor: "#1E1E1E",
+    borderBottomColor: "#3a4a7a",
+    backgroundColor: "#1F2846",
   },
   sidebarTitle: {
     color: "#E0E0E0",
@@ -590,8 +560,8 @@ const darkStyles = StyleSheet.create({
     color: "#AAAAAA",
   },
   sidebarItem: {
-    borderBottomColor: "#333333",
-    backgroundColor: "#1E1E1E",
+    borderBottomColor: "#3a4a7a",
+    backgroundColor: "#1F2846",
   },
   sidebarItemText: {
     color: "#E0E0E0",
@@ -600,7 +570,7 @@ const darkStyles = StyleSheet.create({
     color: "#AAAAAA",
   },
   iconContainer: {
-    backgroundColor: "#333333",
+    backgroundColor: "#3a4a7a",
   },
   iconColor: {
     color: "#E0E0E0",
@@ -609,8 +579,8 @@ const darkStyles = StyleSheet.create({
     color: "#666666",
   },
   activeSidebarItem: {
-    backgroundColor: "#252525",
-    borderLeftColor: "#738ADB",
+    backgroundColor: "#151C31",
+    borderLeftColor: "#151C31",
   },
   activeIconContainer: {
     backgroundColor: "#2D3748",
@@ -622,8 +592,8 @@ const darkStyles = StyleSheet.create({
     color: "#738ADB",
   },
   sidebarFooter: {
-    borderTopColor: "#333333",
-    backgroundColor: "#252525",
+    borderTopColor: "#3a4a7a",
+    backgroundColor: "#151C31",
   },
   footerText: {
     color: "#AAAAAA",
