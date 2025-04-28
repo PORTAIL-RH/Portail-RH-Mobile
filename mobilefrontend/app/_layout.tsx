@@ -53,7 +53,7 @@ export default function RootLayout() {
 
   // Set the API configuration dynamically
   useEffect(() => {
-    setApiConfig("http://192.168.1.32", "8080");
+    setApiConfig("http://172.20.10.7", "8080");
     console.log("API Config:", API_CONFIG.BASE_URL, API_CONFIG.PORT);
   }, []);
 
