@@ -1,291 +1,490 @@
-import React, { useEffect, useState } from "react";
+
+import type React from "react"
+import { useEffect, useState } from "react"
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
   useColorScheme,
   Dimensions,
-  TextInput,
+  Alert,
   Modal,
-  ViewStyle,
-  TextStyle,
-} from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  ArrowLeft,
-  Bell,
-  Moon,
-  Sun,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Filter,
-  Search,
-  Calendar,
-  FileText,
-  ChevronRight,
-  X,
-  Download,
-  Share2,
-  GraduationCap,
-  DollarSign,
-  Shield,
-  Edit,
-  Trash,
-} from "lucide-react-native";
-import Footer from "../../Components/Footer";
-import { API_CONFIG } from "../../config/apiConfig";
+} from "react-native"
+import { useNavigation } from "@react-navigation/native"
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { ArrowLeft, Bell, Moon, Sun } from "lucide-react-native"
+import Footer from "../../Components/Footer"
+import { API_CONFIG } from "../../config/apiConfig"
+import Toast from "react-native-toast-message"
+import useApiPooling from "../../useApiPooling"
+
+// Import our components
+import DemandesList from "./DemandesList"
+import DemandesDetails from "./DemandesDetails"
+import DemandesEditModal from "./DemandesEditModal"
 
 // Définir les types de navigation
 export type RootStackParamList = {
-  AccueilCollaborateur: undefined;
-  Profile: undefined;
-  Demandestot: undefined;
-  Authentification: undefined;
-  Notifications: undefined;
-  Autorisation: undefined;
-  AjouterDemande: undefined;
-  Calendar: undefined;
-};
+  AccueilCollaborateur: undefined
+  Profile: undefined
+  Demandestot: undefined
+  Authentification: undefined
+  Notifications: undefined
+  Autorisation: undefined
+  AjouterDemande: undefined
+  Calendar: undefined
+  DemandesEditModal: {
+    visible: boolean
+    onClose: () => void
+    onSave: () => void
+    editingRequest: Request | null
+    editableData: EditableRequestData
+    setEditableData: React.Dispatch<React.SetStateAction<EditableRequestData>>
+    isDarkMode: boolean
+    themeStyles: any
+    userId: string | null
+  }
+  DemandesDetails: {
+    visible: boolean
+    onClose: () => void
+    onEdit: (request: Request) => void
+    onDelete: (requestId: string, requestType: string) => void
+    selectedRequest: Request | null
+    isDarkMode: boolean
+    themeStyles: any
+    renderSafeText: (value: any) => string
+  }
+  DemandesList: {
+    filteredRequests: Request[]
+    onSelectRequest: (request: Request) => void
+    isDarkMode: boolean
+    themeStyles: any
+    searchQuery: string
+    setSearchQuery: React.Dispatch<React.SetStateAction<string>>
+    activeFilter: string
+    setActiveFilter: React.Dispatch<React.SetStateAction<string>>
+    activeTypeFilter: string
+    setActiveTypeFilter: React.Dispatch<React.SetStateAction<string>>
+    filterRequests: (status: string, type?: string) => void
+    searchRequests: (text: string) => void
+  }
+}
 
-type DemandesNavigationProp = NativeStackNavigationProp<RootStackParamList, "Demandestot">;
+type DemandesNavigationProp = NativeStackNavigationProp<RootStackParamList>
 
-const { width } = Dimensions.get("window");
+// Get both width and height from Dimensions
+const { width, height } = Dimensions.get("window")
 
 // Définir l'interface Request
 interface Request {
-  id: string;
-  type: string;
-  description: string;
-  status: "pending" | "approved" | "rejected";
-  date: string;
-  time: string;
+  id: string
+  type: string
+  description: string
+  status: "pending" | "approved" | "rejected"
+  date: string
+  time: string
+  originalData: {
+    dateDebut?: string
+    dateFin?: string
+    snjTempDep?: string
+    snjTempRetour?: string
+  }
   details: {
-    startDate?: string;
-    endDate?: string;
-    duration?: string;
-    reason?: string;
-    comments?: string;
-    approver?: string;
-    documents?: string[];
-    requestDate?: string;
-    approvalDate?: string;
-    rejectionDate?: string;
-    purpose?: string;
-    equipment?: string;
-    provider?: string;
-    location?: string;
-    cost?: string;
-    amount?: string;
-    repaymentPlan?: string;
-    titre?: string | { titre: string }; // Gérer à la fois les chaînes et les objets
-    typeFormation?: string | { type: string }; // Gérer à la fois les chaînes et les objets
-    theme?: string | { theme: string }; // Gérer à la fois les chaînes et les objets
-    typeDocument?: string;
-    filesReponse?: string[];
-    typePreavance?: string;
-    montant?: string;
-    heureSortie?: string;
-    heureRetour?: string;
-  };
+    startDate?: string
+    endDate?: string
+    duration?: string
+    reason?: string
+    comments?: string
+    approver?: string
+    documents?: string[] // URLs or file paths of uploaded files
+    filesReponse?: string[]
+    requestDate?: string
+    approvalDate?: string
+    rejectionDate?: string
+    purpose?: string
+    equipment?: string
+    provider?: string
+    location?: string
+    cost?: string
+    amount?: string
+    repaymentPlan?: string
+    titre?: string | { titre: string }
+    typeFormation?: string | { type: string }
+    theme?: string | { theme: string }
+    typeDocument?: string
+    typePreavance?: string
+    montant?: string
+    heureSortie?: string
+    heureRetour?: string
+    minuteSortie?: string
+    minuteRetour?: string
+    matPers?: any
+    periodeDebut?: string
+    periodeFin?: string
+    nbrJours?: string
+  }
 }
 
-// Définir les styles de thème
-interface ThemeStyles {
-  container: ViewStyle;
-  header: ViewStyle;
-  searchContainer: ViewStyle;
-  searchInputContainer: ViewStyle;
-  searchInput: TextStyle;
-  filterButton: ViewStyle;
-  filtersScrollView: ViewStyle;
-  filterChip: ViewStyle;
-  filterChipText: TextStyle;
-  text: TextStyle;
-  subtleText: TextStyle;
-  card: ViewStyle;
-  activeFilterOption: ViewStyle;
-  detailsActionButton: ViewStyle;
-  detailsActionButtonText: TextStyle;
-  detailsCancelButton: ViewStyle;
-  detailsCancelButtonText: TextStyle;
-  activeFilterChip?: ViewStyle;
-  activeTypeFilterContainer?: ViewStyle;
-  activeTypeFilterChip?: ViewStyle;
+// Interface pour les données d'édition
+interface EditableRequestData {
+  description?: string
+  titre?: string
+  theme?: string
+  typeFormation?: string
+  typeDocument?: string
+  typePreavance?: string
+  montant?: string
+  heureSortie?: string
+  heureRetour?: string
+  minuteSortie?: string
+  minuteRetour?: string
+  startDate?: string
+  endDate?: string
+  duration?: string
+  periodeDebut?: string
+  periodeFin?: string
+  // Attachments: for uploading multiple files
+  files?: {
+    uri: string
+    name: string
+    type: string
+  }[]
+  titreId?: string
+  typeId?: string
+  themeId?: string
 }
 
 const DemandesPage = () => {
-  const navigation = useNavigation<DemandesNavigationProp>();
-  const systemColorScheme = useColorScheme();
-  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark");
-  const [loading, setLoading] = useState(true);
-  const [requests, setRequests] = useState<Request[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<Request[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState("all");
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [activeTypeFilter, setActiveTypeFilter] = useState("all");
+  const navigation = useNavigation<DemandesNavigationProp>()
+  const systemColorScheme = useColorScheme()
+  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [activeFilter, setActiveFilter] = useState("all")
+  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [activeTypeFilter, setActiveTypeFilter] = useState("all")
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingRequest, setEditingRequest] = useState<Request | null>(null)
+  const [editableData, setEditableData] = useState<EditableRequestData>({})
+  const [userId, setUserId] = useState<string | null>(null)
+  const [userToken, setUserToken] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [dateDebut, setDateDebut] = useState<Date | null>(null)
+  const [dateFin, setDateFin] = useState<Date | null>(null)
+
+  // Utiliser useApiPooling pour les demandes
+  const {
+    data: requests,
+    loading,
+    error,
+    refresh: refreshRequests,
+  } = useApiPooling<Request[]>({
+    apiCall: async () => {
+      if (!userId) {
+        throw new Error("ID utilisateur non disponible")
+      }
+
+      const token = await AsyncStorage.getItem("userToken")
+      if (!token) {
+        throw new Error("Token d'authentification non disponible")
+      }
+
+      // Define the API endpoints for different request types
+      const endpoints = [
+        `/api/demande-autorisation/personnel/${userId}`,
+        `/api/demande-conge/personnel/${userId}`,
+        `/api/demande-formation/personnel/${userId}`,
+        `/api/demande-pre-avance/personnel/${userId}`,
+        `/api/demande-document/personnel/${userId}`,
+      ]
+
+      // Fetch data from all endpoints
+      const responses = await Promise.all(
+        endpoints.map((endpoint) =>
+          fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+            .then((response) => {
+              if (!response.ok) {
+                console.warn(`Failed to fetch from ${endpoint}`)
+                return []
+              }
+              return response.json()
+            })
+            .catch((error) => {
+              console.error(`Error fetching from ${endpoint}:`, error)
+              return []
+            }),
+        ),
+      )
+
+      // Process and combine all responses
+      const [autorisations, conges, formations, preAvances, documents] = responses
+
+      // Map and normalize the data
+      const allDemandes: Request[] = [
+        ...mapDemandes(autorisations, "autorisation"),
+        ...mapDemandes(conges, "congé"),
+        ...mapDemandes(formations, "formation"),
+        ...mapDemandes(preAvances, "pre-avance"),
+        ...mapDemandes(documents, "document"),
+      ]
+
+      // Sort by date (newest first)
+      allDemandes.sort((a, b) => {
+        const dateA = new Date(a.date.split("/").reverse().join("-"))
+        const dateB = new Date(b.date.split("/").reverse().join("-"))
+        return dateB.getTime() - dateA.getTime()
+      })
+
+      return allDemandes
+    },
+    storageKey: "user_requests_data",
+    poolingInterval: 60000, // 1 minute
+    initialData: [],
+  })
+
+  // Filtrer les demandes en fonction des critères
+  const [filteredRequests, setFilteredRequests] = useState<Request[]>([])
+
+  // Mettre à jour les demandes filtrées lorsque les demandes changent
+  useEffect(() => {
+    if (requests) {
+      filterRequests(activeFilter, activeTypeFilter)
+    }
+  }, [requests, activeFilter, activeTypeFilter, searchQuery])
+
+  // Add this debugging function at the top of your component
+  useEffect(() => {
+    // This will help us identify what objects are causing problems
+    const originalError = console.error
+    console.error = (...args) => {
+      if (args[0] && typeof args[0] === "string" && args[0].includes("Objects are not valid as a React child")) {
+        console.log("Problematic object:", args[1])
+      }
+      originalError.apply(console, args)
+    }
+
+    return () => {
+      console.error = originalError
+    }
+  }, [])
 
   // Charger les préférences de thème et récupérer les demandes
   useEffect(() => {
     const loadData = async () => {
-      await loadThemePreference();
-      const userId = await AsyncStorage.getItem("userId");
-      if (userId) {
-        fetchRequests(userId);
-      } else {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
+      await loadThemePreference()
+      await getUserInfo()
+    }
+    loadData()
+  }, [])
 
-  // Récupérer les demandes depuis l'API
-  const fetchRequests = async (userId: string) => {
+  // Récupérer les informations utilisateur
+  const getUserInfo = async () => {
     try {
-      const types = ["formation", "conge", "document", "pre-avance", "autorisation"];
-      let allDemandes: Request[] = [];
+      const userInfo = await AsyncStorage.getItem("userInfo")
+      const token = await AsyncStorage.getItem("userToken")
 
-      for (const type of types) {
-        const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-${type}/personnel/${userId}`);
-        if (!response.ok) {
-          throw new Error(`Erreur lors de la récupération des demandes de type ${type}`);
-        }
-        const data: any[] = await response.json();
+      if (userInfo && token) {
+        const parsedUser = JSON.parse(userInfo)
+        setUserId(parsedUser.id)
+        setUserToken(token)
+        console.log("User ID set in Demandes:", parsedUser.id)
+      } else {
+        console.error("User info or token missing in Demandes")
+      }
+    } catch (error) {
+      console.error("Error retrieving user info in Demandes:", error)
+    }
+  }
 
-        const validatedData = data.map((request) => {
-          // Assurer que le statut est l'une des valeurs autorisées
-          let status: "pending" | "approved" | "rejected";
-          if (request.reponseChef === "I") {
-            status = "pending";
-          } else if (request.reponseChef === "O") {
-            status = "approved";
-          } else {
-            status = "rejected";
-          }
+  // First, let's make sure our renderSafeText function is robust
+  const renderSafeText = (value: any): string => {
+    if (value === null || value === undefined) {
+      return ""
+    }
 
-          return {
-            id: request.id_libre_demande || request.id,
-            type: request.typeDemande || request.typeDemande,
-            description: request.texteDemande || "Pas de description",
-            status,
-            date: new Date(request.dateDemande).toLocaleDateString("fr-FR"),
-            time: new Date(request.dateDemande).toLocaleTimeString("fr-FR"),
-            details: {
-              startDate: request.dateDebut ? new Date(request.dateDebut).toLocaleDateString("fr-FR") : undefined,
-              endDate: request.dateFin ? new Date(request.dateFin).toLocaleDateString("fr-FR") : undefined,
-              duration: request.nbrJours?.toString(),
-              reason: request.texteDemande,
-              documents: request.files?.map((file: any) => file?.filename ?? "Aucun fichier fourni") ?? [],
-              titre: request.titre,
-              typeFormation: request.type,
-              theme: request.theme,
-              typeDocument: request.typeDocument,
-              filesReponse: request.filesReponse?.map((file: any) => file?.filename ?? "Aucun fichier fourni") ?? [],
-              typePreavance: request.type,
-              montant: request.montant?.toString(),
-              heureSortie: request.heureSortie,
-              heureRetour: request.heureRetour,
-            },
-          };
-        });
+    if (typeof value === "string") {
+      return value
+    }
 
-        allDemandes = [...allDemandes, ...validatedData];
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value)
+    }
+
+    if (typeof value === "object") {
+      // Handle specific known object structures from your Java models
+
+      // Case for titre object
+      if (value.titre) {
+        return typeof value.titre === "string" ? value.titre : renderSafeText(value.titre)
       }
 
-      setRequests(allDemandes);
-      setFilteredRequests(allDemandes);
-    } catch (error) {
-      console.error("Erreur lors de la récupération des demandes:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Case for type object
+      if (value.type) {
+        return typeof value.type === "string" ? value.type : renderSafeText(value.type)
+      }
 
-  // Obtenir l'icône pour le type de demande
-  const getRequestTypeIcon = (type: string | undefined) => {
-    const typeString = typeof type === "string" ? type : "unknown";
-    const lowerCaseType = typeString.toLowerCase();
+      // Case for theme object
+      if (value.theme) {
+        return typeof value.theme === "string" ? value.theme : renderSafeText(value.theme)
+      }
 
-    if (lowerCaseType.includes("congé")) {
-      return <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />;
-    } else if (lowerCaseType.includes("formation")) {
-      return <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />;
-    } else if (lowerCaseType.includes("document")) {
-      return <FileText size={24} color={isDarkMode ? "#607D8B" : "#607D8B"} />;
-    } else if (lowerCaseType.includes("pre-avance")) {
-      return <DollarSign size={24} color={isDarkMode ? "#FF9800" : "#FF9800"} />;
-    } else if (lowerCaseType.includes("autorisation")) {
-      return <Shield size={24} color={isDarkMode ? "#673AB7" : "#673AB7"} />;
-    } else {
-      return <FileText size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />;
+      // Specific handling for formation objects that match the model structure
+      if (value.id) {
+        // If it has an id property, it's likely a database object
+        if (value.titre) return value.titre
+        if (value.theme) return value.theme
+        if (value.type) return value.type
+      }
+
+      // For arrays, join the elements
+      if (Array.isArray(value)) {
+        return value.map(renderSafeText).join(", ")
+      }
+
+      // For other objects, convert to JSON string
+      try {
+        return JSON.stringify(value)
+      } catch (e) {
+        return "[Object]"
+      }
     }
-  };
+
+    return String(value)
+  }
+
+  // Update the mapDemandes function to handle complex objects from DemandeFormation
+  const mapDemandes = (data: any[], type: string): Request[] => {
+    if (!Array.isArray(data)) return []
+
+    return data.map((item) => {
+      // Determine status based on reponseChef
+      let status: "pending" | "approved" | "rejected"
+      if (item.reponseChef === "I") {
+        status = "pending"
+      } else if (item.reponseChef === "O") {
+        status = "approved"
+      } else {
+        status = "rejected"
+      }
+
+      const demandDate = new Date(item.dateDemande)
+
+      // Process the data to ensure all values are safe for rendering
+      const safeItem = {
+        id: item.id_libre_demande || item.id,
+        type: renderSafeText(type),
+        description: renderSafeText(item.texteDemande) || "Pas de description",
+        status: status,
+        date: demandDate.toLocaleDateString("fr-FR"), // "14/04/2025"
+        time: demandDate.toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        originalData: {
+          dateDebut: item.dateDebut,
+          dateFin: item.dateFin,
+          snjTempDep: item.snjTempDep,
+          snjTempRetour: item.snjTempRetour,
+        },
+        details: {
+          startDate: item.dateDebut ? new Date(item.dateDebut).toLocaleDateString("fr-FR") : undefined,
+          endDate: item.dateFin ? new Date(item.dateFin).toLocaleDateString("fr-FR") : undefined,
+          duration: item.nbrJours?.toString(),
+          reason: renderSafeText(item.texteDemande),
+          documents: item.files?.map((file: any) => renderSafeText(file?.filename) ?? "Aucun fichier fourni") ?? [],
+          // Store the original objects for title, type, and theme to be processed later with renderSafeText
+          titre: item.titre,
+          typeFormation: item.type,
+          theme: item.theme,
+          typeDocument: renderSafeText(item.typeDocument),
+          filesReponse:
+            item.filesReponse?.map((file: any) => renderSafeText(file?.filename) ?? "Aucun fichier fourni") ?? [],
+          typePreavance: renderSafeText(item.type),
+          montant: item.montant?.toString(),
+          heureSortie: renderSafeText(item.heureSortie),
+          heureRetour: renderSafeText(item.heureRetour),
+          minuteSortie: renderSafeText(item.minuteSortie),
+          minuteRetour: renderSafeText(item.minuteRetour),
+        },
+      }
+
+      return safeItem
+    })
+  }
 
   // Charger les préférences de thème
   const loadThemePreference = async () => {
     try {
-      const storedTheme = await AsyncStorage.getItem("@theme_mode");
+      const storedTheme = await AsyncStorage.getItem("@theme_mode")
       if (storedTheme !== null) {
-        setIsDarkMode(storedTheme === "dark");
+        setIsDarkMode(storedTheme === "dark")
       }
     } catch (error) {
-      console.error("Erreur lors du chargement des préférences de thème:", error);
+      console.error("Erreur lors du chargement des préférences de thème:", error)
     }
-  };
+  }
 
   // Basculer entre les thèmes clair et sombre
   const toggleTheme = async () => {
-    const newTheme = isDarkMode ? "light" : "dark";
-    setIsDarkMode(!isDarkMode);
+    const newTheme = isDarkMode ? "light" : "dark"
+    setIsDarkMode(!isDarkMode)
     try {
-      await AsyncStorage.setItem("@theme_mode", newTheme);
+      // Update both keys for backward compatibility
+      await AsyncStorage.setItem("theme", newTheme)
+      await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde des préférences de thème:", error);
+      console.error("Erreur lors de la sauvegarde des préférences de thème:", error)
     }
-  };
+  }
 
   // Filtrer les demandes par statut et type
   const filterRequests = (status: string, type: string = activeTypeFilter) => {
-    setActiveFilter(status);
+    setActiveFilter(status)
     if (type !== activeTypeFilter) {
-      setActiveTypeFilter(type);
+      setActiveTypeFilter(type)
     }
 
-    let filtered = requests;
+    if (!requests || requests.length === 0) {
+      console.log("No requests to filter")
+      setFilteredRequests([])
+      return
+    }
+
+    let filtered = [...requests]
 
     // Filtrer par statut
     if (status !== "all") {
-      filtered = filtered.filter((request) => request.status === status);
+      filtered = filtered.filter((request) => request.status === status)
     }
 
     // Filtrer par type
     if (type !== "all") {
       filtered = filtered.filter((request) => {
-        const requestType = request.type.toLowerCase();
+        const requestType = request.type.toLowerCase()
         switch (type) {
           case "conge":
-            return requestType.includes("congé");
+            return requestType.includes("congé")
           case "formation":
-            return requestType.includes("formation");
+            return requestType.includes("formation")
           case "avance":
-            return requestType.includes("PreAvnace");
+            return requestType.includes("pre-avance")
           case "document":
-            return requestType.includes("document");
+            return requestType.includes("document")
           case "autorisation":
-            return requestType.includes("autorisation");
+            return requestType.includes("autorisation")
           default:
-            return true;
+            return true
         }
-      });
+      })
     }
 
     // Appliquer la recherche
@@ -293,115 +492,705 @@ const DemandesPage = () => {
       filtered = filtered.filter(
         (request) =>
           request.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          request.description.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+          request.description.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
     }
 
-    setFilteredRequests(filtered);
-    setShowFilterModal(false);
-  };
+    console.log(`Filtered requests: ${filtered.length} items`)
+    setFilteredRequests(filtered)
+  }
 
   // Rechercher des demandes
   const searchRequests = (text: string) => {
-    setSearchQuery(text);
+    setSearchQuery(text)
+    filterRequests(activeFilter, activeTypeFilter)
+  }
 
-    let filtered = requests;
-
-    // Filtrer par statut
-    if (activeFilter !== "all") {
-      filtered = filtered.filter((request) => request.status === activeFilter);
-    }
-
-    // Filtrer par type
-    if (activeTypeFilter !== "all") {
-      filtered = filtered.filter((request) => {
-        const requestType = request.type.toLowerCase();
-        switch (activeTypeFilter) {
-          case "conge":
-            return requestType.includes("congé");
-          case "formation":
-            return requestType.includes("formation");
-          case "avance":
-            return requestType.includes("avance");
-          case "document":
-            return requestType.includes("document");
-          case "autorisation":
-            return requestType.includes("autorisation");
-          default:
-            return true;
-        }
-      });
-    }
-
-    // Appliquer la recherche
-    if (text) {
-      filtered = filtered.filter(
-        (request) =>
-          request.type.toLowerCase().includes(text.toLowerCase()) ||
-          request.description.toLowerCase().includes(text.toLowerCase())
-      );
-    }
-
-    setFilteredRequests(filtered);
-  };
+  // Gérer le rafraîchissement
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await refreshRequests(true)
+    setRefreshing(false)
+  }
 
   // Afficher les détails de la demande
   const viewRequestDetails = (request: Request) => {
-    setSelectedRequest(request);
-    setShowDetailsModal(true);
-  };
+    setSelectedRequest(request)
+    setShowDetailsModal(true)
+  }
 
-  // Obtenir l'icône du statut
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "approved":
-        return <CheckCircle size={18} color="#4CAF50" />;
-      case "rejected":
-        return <XCircle size={18} color="#F44336" />;
-      case "pending":
-        return <Clock size={18} color="#FFC107" />;
-      default:
-        return null;
+  // Update the prepareForEdit function to initialize all fields based on request type
+  const prepareForEdit = (request: Request) => {
+    setEditingRequest(request)
+    console.log("Editing request:", request)
+
+    // Initialiser les dates avec les valeurs de la base de données
+    let startDateObj = null
+    let endDateObj = null
+
+    // Essayer d'abord avec originalData, puis avec details.startDate/endDate
+    if (request.originalData?.dateDebut) {
+      startDateObj = new Date(request.originalData.dateDebut)
+      setDateDebut(startDateObj)
+    } else if (request.details.startDate) {
+      // Convertir le format français (DD/MM/YYYY) en format Date
+      const [day, month, year] = request.details.startDate.split("/").map(Number)
+      if (day && month && year) {
+        startDateObj = new Date(year, month - 1, day)
+        setDateDebut(startDateObj)
+      }
     }
-  };
 
-  // Obtenir la couleur du statut
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "approved":
-        return "#4CAF50";
-      case "rejected":
-        return "#F44336";
-      case "pending":
-        return "#FFC107";
-      default:
-        return "#9370DB";
+    if (request.originalData?.dateFin) {
+      endDateObj = new Date(request.originalData.dateFin)
+      setDateFin(endDateObj)
+    } else if (request.details.endDate) {
+      // Convertir le format français (DD/MM/YYYY) en format Date
+      const [day, month, year] = request.details.endDate.split("/").map(Number)
+      if (day && month && year) {
+        endDateObj = new Date(year, month - 1, day)
+        setDateFin(endDateObj)
+      }
     }
-  };
 
-  // Obtenir le texte du statut
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "approved":
-        return "Approuvée";
-      case "rejected":
-        return "Rejetée";
-      case "pending":
-        return "En attente";
-      default:
-        return "";
+    // Formater les dates pour le formulaire (YYYY-MM-DD)
+    const startDateStr = startDateObj ? startDateObj.toISOString().split("T")[0] : ""
+    const endDateStr = endDateObj ? endDateObj.toISOString().split("T")[0] : ""
+
+    // Déterminer les périodes (matin/après-midi)
+    let periodeDebutValue = "matin"
+    if (request.details.periodeDebut) {
+      periodeDebutValue = request.details.periodeDebut
+    } else if (request.originalData && request.originalData.snjTempDep) {
+      periodeDebutValue = request.originalData.snjTempDep === "M" ? "matin" : "après-midi"
     }
-  };
 
-  // Formater la date au format ../../....
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
-  };
+    let periodeFinValue = "matin"
+    if (request.details.periodeFin) {
+      periodeFinValue = request.details.periodeFin
+    } else if (request.originalData && request.originalData.snjTempRetour) {
+      periodeFinValue = request.originalData.snjTempRetour === "M" ? "matin" : "après-midi"
+    }
+
+    // Extract IDs for titre, type, and theme if they are objects
+    let titreId = ""
+    let typeId = ""
+    let themeId = ""
+
+    if (request.details.titre && typeof request.details.titre === "object" && "id" in request.details.titre) {
+      titreId = request.details.titre.id
+    }
+
+    if (
+      request.details.typeFormation &&
+      typeof request.details.typeFormation === "object" &&
+      "id" in request.details.typeFormation
+    ) {
+      typeId = request.details.typeFormation.id
+    }
+
+    if (request.details.theme && typeof request.details.theme === "object" && "id" in request.details.theme) {
+      themeId = request.details.theme.id
+    }
+
+    // Préparer les données éditables avec toutes les valeurs existantes
+    setEditableData({
+      description: request.description,
+      titre: renderSafeText(request.details.titre),
+      titreId: titreId,
+      theme: renderSafeText(request.details.theme),
+      themeId: themeId,
+      typeFormation: renderSafeText(request.details.typeFormation),
+      typeId: typeId,
+      duration: renderSafeText(request.details.duration || request.details.nbrJours),
+      typeDocument: renderSafeText(request.details.typeDocument),
+      typePreavance: renderSafeText(request.details.typePreavance),
+      montant: renderSafeText(request.details.montant),
+      // Pour les dates, utiliser le format ISO pour les inputs de date
+      startDate: startDateStr,
+      endDate: endDateStr,
+      periodeDebut: periodeDebutValue,
+      periodeFin: periodeFinValue,
+      heureSortie: renderSafeText(request.details.heureSortie),
+      heureRetour: renderSafeText(request.details.heureRetour),
+      minuteSortie: renderSafeText(request.details.minuteSortie),
+      minuteRetour: renderSafeText(request.details.minuteRetour),
+    })
+
+    console.log("Editable data initialized:", {
+      startDate: startDateStr,
+      endDate: endDateStr,
+      periodeDebut: periodeDebutValue,
+      periodeFin: periodeFinValue,
+      dateDebut: startDateObj ? startDateObj.toLocaleDateString() : "null",
+      dateFin: endDateObj ? endDateObj.toLocaleDateString() : "null",
+      titreId: titreId,
+      typeId: typeId,
+      themeId: themeId,
+    })
+
+    setShowEditModal(true)
+  }
+
+  // Delete request
+  const handleDeleteRequest = async (requestId: string, requestType: string) => {
+    try {
+      const token = await AsyncStorage.getItem("userToken")
+      if (!token) {
+        console.error("Authentication token not found")
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Token d'authentification non trouvé",
+        })
+        return
+      }
+
+      const endpointMap: { [key: string]: string } = {
+        autorisation: "/api/demande-autorisation",
+        congé: "/api/demande-conge",
+        formation: "/api/demande-formation",
+        "pre-avance": "/api/demande-pre-avance",
+        document: "/api/demande-document",
+      }
+
+      // Find the correct endpoint based on request type
+      let endpoint = ""
+      for (const [key, value] of Object.entries(endpointMap)) {
+        if (requestType.toLowerCase().includes(key.toLowerCase())) {
+          endpoint = value
+          break
+        }
+      }
+
+      if (!endpoint) {
+        console.error("Unknown request type:", requestType)
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Type de demande inconnu",
+        })
+        return
+      }
+
+      // Use Alert.alert with proper text components
+      Alert.alert("Confirmation", "Êtes-vous sûr de vouloir supprimer cette demande ?", [
+        {
+          text: "Annuler",
+          style: "cancel",
+        },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              console.log(`Deleting request: ${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${requestId}`)
+
+              // Add a timeout to the fetch request
+              const controller = new AbortController()
+              const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+              // For formation requests, use a different approach
+              if (requestType.toLowerCase().includes("formation")) {
+                // Try using a POST request to a specific delete endpoint
+                const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${requestId}`, {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                  signal: controller.signal,
+                })
+
+                clearTimeout(timeoutId)
+
+                if (!response.ok) {
+                  const errorText = await response.text()
+                  throw new Error(`Failed to delete request: ${errorText}`)
+                }
+              } else {
+                // For other request types, try DELETE first
+                let response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${requestId}`, {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                  signal: controller.signal,
+                })
+
+                // If DELETE is not supported, try using a POST request with a special parameter
+                if (response.status === 405) {
+                  // Method Not Allowed
+                  console.log("DELETE method not supported, trying alternative approach")
+
+                  // Try with POST to a delete endpoint
+                  response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/delete/${requestId}`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    signal: controller.signal,
+                  })
+                }
+
+                clearTimeout(timeoutId)
+
+                if (!response.ok) {
+                  const errorText = await response.text()
+                  throw new Error(`Failed to delete request: ${errorText}`)
+                }
+              }
+
+              // Refresh data after successful deletion
+              await refreshRequests(true)
+              setShowDetailsModal(false)
+
+              Toast.show({
+                type: "success",
+                text1: "Demande supprimée",
+                text2: "Votre demande a été supprimée avec succès",
+                position: "bottom",
+                visibilityTime: 4000,
+                autoHide: true,
+              })
+            } catch (error) {
+              if (error.name === "AbortError") {
+                console.error("Request timed out")
+                Toast.show({
+                  type: "error",
+                  text1: "Erreur de connexion",
+                  text2: "La requête a pris trop de temps. Veuillez réessayer.",
+                  position: "bottom",
+                  visibilityTime: 4000,
+                  autoHide: true,
+                })
+              } else {
+                console.error("Error deleting request:", error)
+                Toast.show({
+                  type: "error",
+                  text1: "Échec de la suppression",
+                  text2: `${error instanceof Error ? error.message : "Une erreur est survenue lors de la suppression"}`,
+                  position: "bottom",
+                  visibilityTime: 4000,
+                  autoHide: true,
+                })
+              }
+            }
+          },
+        },
+      ])
+    } catch (error) {
+      console.error("Error in delete process:", error)
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: `Une erreur est survenue: ${error instanceof Error ? error.message : "Erreur inconnue"}`,
+      })
+    }
+  }
+
+  // Update the handleUpdateRequest function to handle the formation dropdown IDs
+  const handleUpdateRequest = async () => {
+    if (!editingRequest) {
+      console.error("No request is being edited")
+      return
+    }
+
+    try {
+      const token = await AsyncStorage.getItem("userToken")
+      if (!token) {
+        console.error("Authentication token not found")
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Token d'authentification non trouvé",
+        })
+        return
+      }
+
+      const endpointMap: { [key: string]: string } = {
+        autorisation: "/api/demande-autorisation",
+        congé: "/api/demande-conge",
+        formation: "/api/demande-formation",
+        "pre-avance": "/api/demande-pre-avance",
+        document: "/api/demande-document",
+      }
+
+      // Find the correct endpoint based on request type
+      let endpoint = ""
+      for (const [key, value] of Object.entries(endpointMap)) {
+        if (editingRequest.type.toLowerCase().includes(key.toLowerCase())) {
+          endpoint = value
+          break
+        }
+      }
+
+      if (!endpoint) {
+        console.error("Unknown request type:", editingRequest.type)
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Type de demande inconnu",
+        })
+        return
+      }
+
+      // Prepare data to send based on request type
+      const requestData: any = {
+        // Always include the ID to ensure update rather than create
+        id: editingRequest.id,
+      }
+
+      // Common field for all request types
+      if (editableData.description) {
+        requestData.texteDemande = editableData.description
+      }
+
+      // Handle congé specific fields
+      if (editingRequest.type.toLowerCase().includes("congé")) {
+        // Dates de début et fin
+        if (editableData.startDate) {
+          requestData.dateDebut = editableData.startDate
+        }
+
+        if (editableData.endDate) {
+          requestData.dateFin = editableData.endDate
+        }
+
+        // Périodes de début et fin
+        if (editableData.periodeDebut) {
+          requestData.snjTempDep = editableData.periodeDebut === "matin" ? "M" : "S"
+        }
+
+        if (editableData.periodeFin) {
+          requestData.snjTempRetour = editableData.periodeFin === "matin" ? "M" : "S"
+        }
+
+        // Nombre de jours
+        if (editableData.duration) {
+          requestData.nbrJours = editableData.duration
+        }
+
+        // Date de reprise prévue (même que la date de fin)
+        if (editableData.endDate) {
+          requestData.dateReprisePrev = editableData.endDate
+        }
+      }
+
+      // Handle pre-avance specific fields and validation
+      if (editingRequest.type.toLowerCase().includes("pre-avance")) {
+        requestData.typeDemande = "PreAvnace"
+
+        // Validate type exists
+        if (!editableData.typePreavance) {
+          Toast.show({
+            type: "error",
+            text1: "Type manquant",
+            text2: "Veuillez sélectionner un type de pré-avance",
+            position: "bottom",
+            visibilityTime: 4000,
+          })
+          return
+        }
+        requestData.type = editableData.typePreavance
+
+        // Validate amount
+        if (!editableData.montant) {
+          Toast.show({
+            type: "error",
+            text1: "Montant manquant",
+            text2: "Veuillez saisir un montant",
+            position: "bottom",
+            visibilityTime: 4000,
+          })
+          return
+        }
+
+        const montant = Number.parseFloat(editableData.montant)
+        if (isNaN(montant)) {
+          Toast.show({
+            type: "error",
+            text1: "Montant invalide",
+            text2: "Veuillez saisir un nombre valide",
+            position: "bottom",
+            visibilityTime: 4000,
+          })
+          return
+        }
+
+        // Check against maximum amounts
+        const typeMaxAmounts: Record<string, number> = {
+          MEDICAL: 2000.0,
+          SCOLARITE: 1500.0,
+          VOYAGE: 1000.0,
+          INFORMATIQUE: 800.0,
+          DEMENAGEMENT: 3000.0,
+          MARIAGE: 5000.0,
+          FUNERAILLES: 2000.0,
+        }
+
+        const maxAmount = typeMaxAmounts[requestData.type] || 0
+
+        if (montant > maxAmount) {
+          Toast.show({
+            type: "error",
+            text1: "Montant trop élevé",
+            text2: `Le maximum pour ${requestData.type} est ${maxAmount} €`,
+            position: "bottom",
+            visibilityTime: 5000,
+          })
+          return
+        }
+
+        requestData.montant = montant
+      }
+
+      // Handle autorisation specific fields
+      if (editingRequest.type.toLowerCase().includes("autorisation")) {
+        if (editableData.startDate) {
+          requestData.dateDebut = editableData.startDate
+        }
+
+        if (editableData.heureSortie) {
+          const [hours, minutes] = editableData.heureSortie.split(":")
+          requestData.heureSortie = hours
+          requestData.minuteSortie = minutes
+        }
+
+        if (editableData.heureRetour) {
+          const [hours, minutes] = editableData.heureRetour.split(":")
+          requestData.heureRetour = hours
+          requestData.minuteRetour = minutes
+        }
+      }
+
+      // Handle formation specific fields
+      if (editingRequest.type.toLowerCase().includes("formation")) {
+        if (editableData.startDate) {
+          requestData.dateDebut = editableData.startDate
+        }
+
+        if (editableData.duration) {
+          requestData.nbrJours = editableData.duration
+        }
+
+        // For formation requests, we need to send objects with IDs for titre, type, and theme
+        if (editableData.titreId && editableData.titre) {
+          requestData.titre = { id: editableData.titreId, titre: editableData.titre }
+        }
+
+        if (editableData.typeId && editableData.typeFormation) {
+          requestData.type = { id: editableData.typeId, type: editableData.typeFormation }
+        }
+
+        if (editableData.themeId && editableData.theme) {
+          requestData.theme = { id: editableData.themeId, theme: editableData.theme }
+        }
+
+        // Important: Do NOT include dateDemande in the request data
+        // This ensures the original submission date is preserved
+        // The backend should keep the original dateDemande unchanged
+      }
+
+      // Handle document specific fields
+      if (editingRequest.type.toLowerCase().includes("document")) {
+        if (editableData.typeDocument) {
+          requestData.typeDocument = editableData.typeDocument
+        }
+      }
+
+      // Ensure we preserve the personnel reference
+      if (editingRequest.details && "matPers" in editingRequest.details) {
+        requestData.matPers = editingRequest.details.matPers
+      }
+
+      console.log("Sending update with data:", JSON.stringify(requestData))
+      console.log(`Update URL: ${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${editingRequest.id}`)
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${editingRequest.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestData),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Failed to update request: ${errorText}`)
+      }
+
+      // Refresh data after successful update
+      await refreshRequests(true)
+      setShowEditModal(false)
+      setShowDetailsModal(false)
+
+      // Show success toast with specific message based on request type
+      Toast.show({
+        type: "success",
+        text1: "Demande mise à jour",
+        text2: `Votre demande de ${editingRequest.type.toLowerCase()} a été modifiée avec succès`,
+        position: "bottom",
+        visibilityTime: 4000,
+        autoHide: true,
+      })
+    } catch (error) {
+      if (error.name === "AbortError") {
+        Toast.show({
+          type: "error",
+          text1: "Erreur de connexion",
+          text2: "La requête a pris trop de temps. Veuillez réessayer.",
+          position: "bottom",
+          visibilityTime: 4000,
+          autoHide: true,
+        })
+      } else {
+        console.error("Error updating request:", error)
+
+        let errorMessage = "Erreur lors de la mise à jour"
+        if (error instanceof Error) {
+          errorMessage = error.message.includes("dépasser") ? error.message : "Erreur serveur lors de la mise à jour"
+        }
+
+        Toast.show({
+          type: "error",
+          text1: "Échec de la mise à jour",
+          text2: errorMessage,
+          position: "bottom",
+          visibilityTime: 4000,
+          autoHide: true,
+        })
+      }
+    }
+  }
+
+  // Define theme styles
+  const darkStyles = StyleSheet.create({
+    container: {
+      backgroundColor: "#1a1f38",
+    },
+    header: {
+      backgroundColor: "#1F2846",
+      borderBottomColor: "#1a1f38",
+    },
+    searchContainer: {
+      borderBottomColor: "#1a1f38",
+    },
+    searchInputContainer: {
+      backgroundColor: "#1a1f38",
+      borderColor: "#1F2846",
+    },
+    searchInput: {
+      color: "#E0E0E0",
+    },
+    filterButton: {
+      borderColor: "#1F2846",
+    },
+    filtersScrollView: {
+      borderBottomColor: "#1a1f38",
+    },
+    filterChip: {
+      borderColor: "#1F2846",
+      backgroundColor: "#1a1f38",
+    },
+    filterChipText: {
+      color: "#E0E0E0",
+    },
+    text: {
+      color: "#E0E0E0",
+    },
+    subtleText: {
+      color: "#AAAAAA",
+    },
+    card: {
+      backgroundColor: "#1F2846",
+    },
+    activeFilterOption: {
+      backgroundColor: "rgba(147, 112, 219, 0.3)",
+    },
+    detailsActionButton: {
+      backgroundColor: "#1a1f38",
+    },
+    detailsActionButtonText: {
+      color: "#E0E0E0",
+    },
+    detailsCancelButton: {
+      backgroundColor: "#F44336",
+    },
+    detailsCancelButtonText: {
+      color: "#FFFFFF",
+    },
+  })
+
+  const lightStyles = StyleSheet.create({
+    container: {
+      backgroundColor: "#F5F5F5",
+    },
+    header: {
+      backgroundColor: "#FFFFFF",
+      borderBottomColor: "#E0E0E0",
+    },
+    searchContainer: {
+      backgroundColor: "#FFFFFF",
+      borderBottomColor: "#E0E0E0",
+    },
+    searchInputContainer: {
+      backgroundColor: "#FFFFFF",
+      borderColor: "#E0E0E0",
+    },
+    searchInput: {
+      color: "#333",
+    },
+    filterButton: {
+      borderColor: "#E0E0E0",
+    },
+    filtersScrollView: {
+      borderBottomColor: "#E0E0E0",
+    },
+    filterChip: {
+      borderColor: "#E0E0E0",
+      backgroundColor: "#FFFFFF",
+    },
+    filterChipText: {
+      color: "#333",
+    },
+    text: {
+      color: "#333",
+    },
+    subtleText: {
+      color: "#757575",
+    },
+    card: {
+      backgroundColor: "#FFFFFF",
+    },
+    activeFilterOption: {
+      backgroundColor: "rgba(147, 112, 219, 0.1)",
+    },
+    detailsActionButton: {
+      backgroundColor: "#9370DB",
+    },
+    detailsActionButtonText: {
+      color: "#FFFFFF",
+    },
+    detailsCancelButton: {
+      backgroundColor: "#F44336",
+    },
+    detailsCancelButtonText: {
+      color: "#FFFFFF",
+    },
+  })
 
   // Appliquer les styles de thème
-  const themeStyles = isDarkMode ? darkStyles : lightStyles;
+  const themeStyles = isDarkMode ? darkStyles : lightStyles
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
@@ -411,7 +1200,9 @@ const DemandesPage = () => {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("AccueilCollaborateur")}>
             <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, themeStyles.text]}>Mes demandes</Text>
+          <View style={styles.headerTitle}>
+            <Text style={[styles.headerTitleText, themeStyles.text]}>Mes demandes</Text>
+          </View>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate("Notifications")}>
@@ -424,608 +1215,74 @@ const DemandesPage = () => {
       </View>
 
       {/* Contenu */}
-      {loading ? (
+      {loading && !requests ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#9370DB" />
         </View>
       ) : (
-        <>
-          {/* Barre de recherche et filtre */}
-          <View style={[styles.searchContainer, themeStyles.searchContainer]}>
-            <View style={[styles.searchInputContainer, themeStyles.searchInputContainer]}>
-              <Search size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} style={styles.searchIcon} />
-              <TextInput
-                style={[styles.searchInput, themeStyles.searchInput]}
-                placeholder="Rechercher une demande..."
-                placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
-                value={searchQuery}
-                onChangeText={searchRequests}
-              />
-            </View>
-            <TouchableOpacity
-              style={[styles.filterButton, themeStyles.filterButton]}
-              onPress={() => setShowFilterModal(true)}
-            >
-              <Filter size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Liste des demandes */}
-          <ScrollView
-            style={styles.scrollContainer}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {filteredRequests.length === 0 ? (
-              <View style={[styles.emptyContainer, themeStyles.card]}>
-                <FileText size={48} color={isDarkMode ? "#555" : "#ccc"} />
-                <Text style={[styles.emptyText, themeStyles.text]}>Aucune demande trouvée</Text>
-                <Text style={[styles.emptySubtext, themeStyles.subtleText]}>
-                  Aucune demande ne correspond à vos critères de recherche
-                </Text>
-              </View>
-            ) : (
-              filteredRequests.map((request) => (
-                <TouchableOpacity
-                  key={request.id}
-                  style={[styles.requestCard, themeStyles.card]}
-                  onPress={() => viewRequestDetails(request)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.requestCardHeader}>
-                    <View style={styles.requestTypeContainer}>
-                      {getRequestTypeIcon(request.type)}
-                      <View style={styles.requestTypeTextContainer}>
-                        <Text style={[styles.requestType, themeStyles.text]}>{request.type}</Text>
-                        <View style={styles.requestStatusContainer}>
-                          {getStatusIcon(request.status)}
-                          <Text style={[styles.requestStatusText, { color: getStatusColor(request.status) }]}>
-                            {getStatusText(request.status)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <ChevronRight size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                  </View>
-
-                  <Text style={[styles.requestDescription, themeStyles.subtleText]}>{request.description}</Text>
-
-                  <View style={styles.requestFooter}>
-                    <Text style={[styles.requestDate, themeStyles.subtleText]}>
-                      {request.date} • {request.time}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.requestStatusBar, { backgroundColor: getStatusColor(request.status) }]} />
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-
-          {/* Modal de filtre */}
-          <Modal
-            visible={showFilterModal}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setShowFilterModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={[styles.filterModal, themeStyles.card]}>
-                <View style={styles.filterModalHeader}>
-                  <Text style={[styles.filterModalTitle, themeStyles.text]}>Filtrer les demandes</Text>
-                  <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-                    <X size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Filtrer par statut */}
-                <Text style={[styles.filterSectionTitle, themeStyles.text]}>Par statut</Text>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeFilter === "all" && styles.activeFilterOption,
-                    activeFilter === "all" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests("all")}
-                >
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      themeStyles.text,
-                      activeFilter === "all" && styles.activeFilterOptionText,
-                    ]}
-                  >
-                    Tous les statuts
-                  </Text>
-                  {activeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeFilter === "pending" && styles.activeFilterOption,
-                    activeFilter === "pending" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests("pending")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <Clock size={20} color="#FFC107" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeFilter === "pending" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      En attente
-                    </Text>
-                  </View>
-                  {activeFilter === "pending" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeFilter === "approved" && styles.activeFilterOption,
-                    activeFilter === "approved" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests("approved")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <CheckCircle size={20} color="#4CAF50" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeFilter === "approved" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Approuvées
-                    </Text>
-                  </View>
-                  {activeFilter === "approved" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeFilter === "rejected" && styles.activeFilterOption,
-                    activeFilter === "rejected" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests("rejected")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <XCircle size={20} color="#F44336" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeFilter === "rejected" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Rejetées
-                    </Text>
-                  </View>
-                  {activeFilter === "rejected" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                {/* Filtrer par type */}
-                <Text style={[styles.filterSectionTitle, themeStyles.text, { marginTop: 16 }]}>Par type</Text>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeTypeFilter === "all" && styles.activeFilterOption,
-                    activeTypeFilter === "all" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests(activeFilter, "all")}
-                >
-                  <Text
-                    style={[
-                      styles.filterOptionText,
-                      themeStyles.text,
-                      activeTypeFilter === "all" && styles.activeFilterOptionText,
-                    ]}
-                  >
-                    Tous les types
-                  </Text>
-                  {activeTypeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeTypeFilter === "conge" && styles.activeFilterOption,
-                    activeTypeFilter === "conge" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests(activeFilter, "conge")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <Calendar size={20} color="#9370DB" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeTypeFilter === "conge" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Congés
-                    </Text>
-                  </View>
-                  {activeTypeFilter === "conge" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeTypeFilter === "formation" && styles.activeFilterOption,
-                    activeTypeFilter === "formation" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests(activeFilter, "formation")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <GraduationCap size={20} color="#2196F3" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeTypeFilter === "formation" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Formations
-                    </Text>
-                  </View>
-                  {activeTypeFilter === "formation" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeTypeFilter === "avance" && styles.activeFilterOption,
-                    activeTypeFilter === "avance" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests(activeFilter, "avance")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <DollarSign size={20} color="#FF9800" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeTypeFilter === "avance" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Avances
-                    </Text>
-                  </View>
-                  {activeTypeFilter === "avance" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeTypeFilter === "document" && styles.activeFilterOption,
-                    activeTypeFilter === "document" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests(activeFilter, "document")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <FileText size={20} color="#607D8B" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeTypeFilter === "document" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Documents
-                    </Text>
-                  </View>
-                  {activeTypeFilter === "document" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    activeTypeFilter === "autorisation" && styles.activeFilterOption,
-                    activeTypeFilter === "autorisation" && themeStyles.activeFilterOption,
-                  ]}
-                  onPress={() => filterRequests(activeFilter, "autorisation")}
-                >
-                  <View style={styles.filterOptionContent}>
-                    <Shield size={20} color="#673AB7" />
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        themeStyles.text,
-                        activeTypeFilter === "autorisation" && styles.activeFilterOptionText,
-                      ]}
-                    >
-                      Autorisations
-                    </Text>
-                  </View>
-                  {activeTypeFilter === "autorisation" && <CheckCircle size={20} color="#9370DB" />}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-
-          {/* Modal de détails */}
-          {selectedRequest && (
-            <Modal
-              visible={showDetailsModal}
-              transparent={true}
-              animationType="slide"
-              onRequestClose={() => setShowDetailsModal(false)}
-            >
-              <View style={[styles.detailsModalContainer, themeStyles.container]}>
-                <View style={[styles.detailsModalHeader, themeStyles.header]}>
-                  <TouchableOpacity style={styles.backButton} onPress={() => setShowDetailsModal(false)}>
-                    <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
-                  </TouchableOpacity>
-                  <Text style={[styles.detailsModalTitle, themeStyles.text]}>Détails de la demande</Text>
-                  <View style={{ width: 40 }} />
-                </View>
-
-                <ScrollView
-                  style={styles.detailsScrollContainer}
-                  contentContainerStyle={styles.detailsScrollContent}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {/* En-tête de la demande */}
-                  <View style={[styles.detailsHeader, themeStyles.card]}>
-                    <View style={styles.detailsHeaderContent}>
-                      <View style={styles.detailsTypeContainer}>
-                        {getRequestTypeIcon(selectedRequest.type)}
-                        <Text style={[styles.detailsType, themeStyles.text]}>{selectedRequest.type}</Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.detailsStatusBadge,
-                          { backgroundColor: `${getStatusColor(selectedRequest.status)}20` },
-                        ]}
-                      >
-                        {getStatusIcon(selectedRequest.status)}
-                        <Text style={[styles.detailsStatusText, { color: getStatusColor(selectedRequest.status) }]}>
-                          {getStatusText(selectedRequest.status)}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={[styles.detailsDescription, themeStyles.subtleText]}>
-                      {selectedRequest.description}
-                    </Text>
-                    <Text style={[styles.detailsDate, themeStyles.subtleText]}>
-                      Soumise le {selectedRequest.date} à {selectedRequest.time}
-                    </Text>
-                  </View>
-
-                  {/* Informations de la demande */}
-                  <View style={[styles.detailsSection, themeStyles.card]}>
-                    <Text style={[styles.detailsSectionTitle, themeStyles.text]}>Informations</Text>
-
-                    {selectedRequest.details.startDate && selectedRequest.details.endDate && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Période:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {formatDate(selectedRequest.details.startDate)} → {formatDate(selectedRequest.details.endDate)}
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.titre && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Titre:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {typeof selectedRequest.details.titre === "object"
-                            ? selectedRequest.details.titre.titre
-                            : selectedRequest.details.titre}
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.typeFormation && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Type de formation:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {typeof selectedRequest.details.typeFormation === "object"
-                            ? selectedRequest.details.typeFormation.type
-                            : selectedRequest.details.typeFormation}
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.theme && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Thème:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {typeof selectedRequest.details.theme === "object"
-                            ? selectedRequest.details.theme.theme
-                            : selectedRequest.details.theme}
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.typeDocument && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Type de document:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {selectedRequest.details.typeDocument}
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.typePreavance && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Type de préavance:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {selectedRequest.details.typePreavance}
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.montant && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Montant:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {selectedRequest.details.montant} €
-                        </Text>
-                      </View>
-                    )}
-
-                    {selectedRequest.details.heureSortie && selectedRequest.details.heureRetour && (
-                      <View style={styles.detailsItem}>
-                        <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Heure de sortie/retour:</Text>
-                        <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                          {selectedRequest.details.heureSortie} → {selectedRequest.details.heureRetour}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Documents */}
-                  {selectedRequest.details.documents && selectedRequest.details.documents.length > 0 && (
-                    <View style={[styles.detailsSection, themeStyles.card]}>
-                      <Text style={[styles.detailsSectionTitle, themeStyles.text]}>Documents</Text>
-
-                      {selectedRequest.details.documents.map((document: string, index: number) => (
-                        <View key={index} style={styles.documentItem}>
-                          <View style={styles.documentInfo}>
-                            <FileText size={20} color={isDarkMode ? "#9370DB" : "#9370DB"} />
-                            <Text style={[styles.documentName, themeStyles.text]}>{document}</Text>
-                          </View>
-                          <View style={styles.documentActions}>
-                            <TouchableOpacity style={styles.documentAction}>
-                              <Download size={18} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.documentAction}>
-                              <Share2 size={18} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Documents de réponse */}
-                  {selectedRequest.details.filesReponse && selectedRequest.details.filesReponse.length > 0 && (
-                    <View style={[styles.detailsSection, themeStyles.card]}>
-                      <Text style={[styles.detailsSectionTitle, themeStyles.text]}>Documents de réponse</Text>
-
-                      {selectedRequest.details.filesReponse.map((document: string, index: number) => (
-                        <View key={index} style={styles.documentItem}>
-                          <View style={styles.documentInfo}>
-                            <FileText size={20} color={isDarkMode ? "#9370DB" : "#9370DB"} />
-                            <Text style={[styles.documentName, themeStyles.text]}>{document}</Text>
-                          </View>
-                          <View style={styles.documentActions}>
-                            <TouchableOpacity style={styles.documentAction}>
-                              <Download size={18} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.documentAction}>
-                              <Share2 size={18} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Historique */}
-                  <View style={[styles.detailsSection, themeStyles.card]}>
-                    <Text style={[styles.detailsSectionTitle, themeStyles.text]}>Historique</Text>
-
-                    <View style={styles.timelineContainer}>
-                      <View style={styles.timelineItem}>
-                        <View style={[styles.timelineDot, { backgroundColor: "#9370DB" }]} />
-                        <View style={styles.timelineContent}>
-                          <Text style={[styles.timelineTitle, themeStyles.text]}>Demande soumise</Text>
-                          <Text style={[styles.timelineDate, themeStyles.subtleText]}>
-                            {selectedRequest.date} à {selectedRequest.time}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {selectedRequest.status !== "pending" && (
-                        <View style={styles.timelineItem}>
-                          <View
-                            style={[styles.timelineDot, { backgroundColor: getStatusColor(selectedRequest.status) }]}
-                          />
-                          <View style={styles.timelineContent}>
-                            <Text style={[styles.timelineTitle, themeStyles.text]}>
-                              Demande {selectedRequest.status === "approved" ? "approuvée" : "rejetée"}
-                            </Text>
-                            <Text style={[styles.timelineDate, themeStyles.subtleText]}>
-                              {selectedRequest.status === "approved"
-                                ? selectedRequest.details.approvalDate || "Un jour après la soumission"
-                                : selectedRequest.details.rejectionDate || "Cinq jours après la soumission"}
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-
-                      {selectedRequest.status === "pending" && (
-                        <View style={styles.timelineItem}>
-                          <View style={[styles.timelineDot, { backgroundColor: "#FFC107" }]} />
-                          <View style={styles.timelineContent}>
-                            <Text style={[styles.timelineTitle, themeStyles.text]}>En attente d'approbation</Text>
-                            <Text style={[styles.timelineDate, themeStyles.subtleText]}>En cours de traitement</Text>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* Actions */}
-                  <View style={styles.detailsActions}>
-                    <TouchableOpacity
-                      style={[styles.detailsActionButton, themeStyles.detailsActionButton]}
-                      onPress={() => setShowDetailsModal(false)}
-                    >
-                      <Text style={[styles.detailsActionButtonText, themeStyles.detailsActionButtonText]}>Fermer</Text>
-                    </TouchableOpacity>
-
-                    {selectedRequest.status === "pending" && (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.detailsActionButton, themeStyles.detailsActionButton]}
-                          onPress={() => {
-                            // Gérer l'action de modification
-                          }}
-                        >
-                          <Edit size={18} color={isDarkMode ? "#E0E0E0" : "#333"} />
-                          <Text style={[styles.detailsActionButtonText, themeStyles.detailsActionButtonText]}>
-                            Modifier
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.detailsCancelButton, themeStyles.detailsCancelButton]}
-                          onPress={() => {
-                            // Gérer l'action de suppression
-                          }}
-                        >
-                          <Trash size={18} color="#FFFFFF" />
-                          <Text style={[styles.detailsCancelButtonText, themeStyles.detailsCancelButtonText]}>
-                            Supprimer
-                          </Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </ScrollView>
-              </View>
-            </Modal>
-          )}
-        </>
+        <DemandesList
+          filteredRequests={filteredRequests}
+          onSelectRequest={viewRequestDetails}
+          isDarkMode={isDarkMode}
+          themeStyles={themeStyles}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          activeFilter={activeFilter}
+          setActiveFilter={setActiveFilter}
+          activeTypeFilter={activeTypeFilter}
+          setActiveTypeFilter={setActiveTypeFilter}
+          filterRequests={filterRequests}
+          searchRequests={searchRequests}
+        />
       )}
+
+      {/* Details Modal */}
+      {selectedRequest && (
+        <Modal
+          visible={showDetailsModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowDetailsModal(false)}
+        >
+          <DemandesDetails
+            visible={showDetailsModal}
+            onClose={() => setShowDetailsModal(false)}
+            onEdit={prepareForEdit}
+            onDelete={handleDeleteRequest}
+            selectedRequest={selectedRequest}
+            isDarkMode={isDarkMode}
+            themeStyles={themeStyles}
+            renderSafeText={renderSafeText}
+          />
+        </Modal>
+      )}
+
+      {/* Edit Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <DemandesEditModal
+          visible={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleUpdateRequest}
+          editingRequest={editingRequest}
+          editableData={editableData}
+          setEditableData={setEditableData}
+          isDarkMode={isDarkMode}
+          themeStyles={themeStyles}
+          userId={userId}
+        />
+      </Modal>
 
       {/* Pied de page */}
       <Footer />
     </SafeAreaView>
-  );
-};
+  )
+}
 
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1035,8 +1292,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 40, // More space for status bar
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 10,
   },
   headerLeft: {
     flexDirection: "row",
@@ -1047,6 +1312,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   headerTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerTitleText: {
     fontSize: 20,
     fontWeight: "bold",
   },
@@ -1064,518 +1333,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "transparent",
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 40,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    fontSize: 16,
-  },
-  filterButton: {
-    marginLeft: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  filtersScrollView: {
-    maxHeight: 60,
-    borderBottomWidth: 1,
-  },
-  filtersContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: "row",
-    gap: 8,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
-  },
-  activeFilterChip: {
-    backgroundColor: "#9370DB",
-    borderColor: "#9370DB",
-  },
-  filterChipText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  activeFilterChipText: {
-    color: "#FFFFFF",
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-    borderRadius: 16,
-    marginTop: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 8,
-  },
-  requestCard: {
-    borderRadius: 16,
-    marginBottom: 16,
-    padding: 16,
-    position: "relative",
-    overflow: "hidden",
-  },
-  requestCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  requestTypeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  requestTypeTextContainer: {
-    flex: 1,
-  },
-  requestType: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  requestStatusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  requestStatusText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  requestDescription: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  requestFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  requestDate: {
-    fontSize: 12,
-  },
-  requestStatusBar: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  filterModal: {
-    width: width * 0.8,
-    borderRadius: 16,
-    padding: 20,
-  },
-  filterModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  filterModalTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  filterOption: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-  },
-  activeFilterOption: {
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
-  },
-  filterOptionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  filterOptionText: {
-    fontSize: 16,
-    marginLeft: 12,
-  },
-  activeFilterOptionText: {
-    fontWeight: "600",
-  },
-  detailsModalContainer: {
-    flex: 1,
-  },
-  detailsModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  detailsModalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  detailsScrollContainer: {
-    flex: 1,
-  },
-  detailsScrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  detailsHeader: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  detailsHeaderContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  detailsTypeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  detailsType: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  detailsStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-    gap: 6,
-  },
-  detailsStatusText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  detailsDescription: {
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  detailsDate: {
-    fontSize: 14,
-  },
-  detailsSection: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  detailsSectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  detailsItem: {
-    marginBottom: 12,
-  },
-  detailsItemLabel: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  detailsItemValue: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  documentItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
-  },
-  documentInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  documentName: {
-    fontSize: 16,
-  },
-  documentActions: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  documentAction: {
-    padding: 4,
-  },
-  timelineContainer: {
-    paddingLeft: 8,
-  },
-  timelineItem: {
-    flexDirection: "row",
-    marginBottom: 16,
-    position: "relative",
-  },
-  timelineDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 16,
-    marginTop: 4,
-  },
-  timelineContent: {
-    flex: 1,
-  },
-  timelineTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  timelineDate: {
-    fontSize: 14,
-  },
-  detailsActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-    gap: 12,
-  },
-  detailsActionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  detailsActionButtonText: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  detailsCancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F44336",
-  },
-  detailsCancelButtonText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#FFFFFF",
-  },
-  filterSectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  activeTypeFilterContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  activeTypeFilterLabel: {
-    fontSize: 14,
-    marginRight: 8,
-  },
-  activeTypeFilterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
-  },
-  activeTypeFilterText: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginRight: 8,
-  },
-  clearTypeFilterButton: {
-    padding: 2,
-  },
-});
+})
 
-// Styles pour le thème clair
-const lightStyles: ThemeStyles = StyleSheet.create({
-  container: {
-    backgroundColor: "#F5F5F5",
-  },
-  header: {
-    backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
-  },
-  searchContainer: {
-    backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
-  },
-  searchInputContainer: {
-    backgroundColor: "#F5F5F5",
-    borderColor: "#EEEEEE",
-  },
-  searchInput: {
-    color: "#333333",
-  },
-  filterButton: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#EEEEEE",
-  },
-  filtersScrollView: {
-    backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
-  },
-  filterChip: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#EEEEEE",
-  },
-  filterChipText: {
-    color: "#757575",
-  },
-  text: {
-    color: "#333333",
-  },
-  subtleText: {
-    color: "#757575",
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  activeFilterOption: {
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
-  },
-  detailsActionButton: {
-    backgroundColor: "#F5F5F5",
-    borderColor: "#DDDDDD",
-  },
-  detailsActionButtonText: {
-    color: "#333333",
-  },
-  detailsCancelButton: {
-    backgroundColor: "#F44336",
-  },
-  detailsCancelButtonText: {
-    color: "#FFFFFF",
-  },
-});
-
-// Styles pour le thème sombre
-const darkStyles: ThemeStyles = StyleSheet.create({
-  container: {
-    backgroundColor: "#121212",
-  },
-  header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
-  },
-  searchContainer: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
-  },
-  searchInputContainer: {
-    backgroundColor: "#2A2A2A",
-    borderColor: "#333333",
-  },
-  searchInput: {
-    color: "#E0E0E0",
-  },
-  filterButton: {
-    backgroundColor: "#2A2A2A",
-    borderColor: "#333333",
-  },
-  filtersScrollView: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
-  },
-  filterChip: {
-    backgroundColor: "#2A2A2A",
-    borderColor: "#333333",
-  },
-  filterChipText: {
-    color: "#AAAAAA",
-  },
-  text: {
-    color: "#E0E0E0",
-  },
-  subtleText: {
-    color: "#AAAAAA",
-  },
-  card: {
-    backgroundColor: "#2A2A2A",
-    borderColor: "#333333",
-    borderWidth: 1,
-  },
-  activeFilterOption: {
-    backgroundColor: "rgba(147, 112, 219, 0.15)",
-  },
-  detailsActionButton: {
-    backgroundColor: "#2A2A2A",
-    borderColor: "#333333",
-  },
-  detailsActionButtonText: {
-    color: "#E0E0E0",
-  },
-  detailsCancelButton: {
-    backgroundColor: "#F44336",
-  },
-  detailsCancelButtonText: {
-    color: "#FFFFFF",
-  },
-});
-
-export default DemandesPage;
+export default DemandesPage

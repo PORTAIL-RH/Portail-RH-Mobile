@@ -38,6 +38,7 @@ import {
 import Footer from "../../Components/Footer"
 import { API_CONFIG } from "../../config/apiConfig"
 import SidebarLayout from "./SidebarLayout"
+import Toast from 'react-native-toast-message';
 
 // Define the navigation stack types
 export type RootStackParamList = {
@@ -76,9 +77,21 @@ const FormationPage = () => {
   const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark")
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [showToast, setShowToast] = useState(false)
-  const [toastMessage, setToastMessage] = useState("")
-  const [toastType, setToastType] = useState<"success" | "error">("success")
+
+  const showToast = (type: 'success' | 'error', message: string, shouldNavigate = false) => {
+    Toast.show({
+      type,
+      text1: type === 'success' ? 'Succès' : 'Erreur',
+      text2: message,
+      position: 'bottom',
+      visibilityTime: 3000,
+      onHide: () => {
+        if (shouldNavigate) {
+          navigation.navigate('AccueilCollaborateur');
+        }
+      }
+    });
+  };
 
   // Form state
   const [dateDebut, setDateDebut] = useState(new Date())
@@ -116,7 +129,7 @@ const FormationPage = () => {
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync()
       if (status !== "granted") {
-        displayToast("error", "Vous devez autoriser l'accès aux fichiers pour joindre des documents.")
+        showToast("error", "Vous devez autoriser l'accès aux fichiers pour joindre des documents.")
       }
     } catch (error) {
       console.error("Error requesting permissions:", error)
@@ -141,6 +154,7 @@ const FormationPage = () => {
     setIsDarkMode(!isDarkMode)
     try {
       await AsyncStorage.setItem("@theme_mode", newTheme)
+      await AsyncStorage.setItem("theme", newTheme)
     } catch (error) {
       console.error("Error saving theme preference:", error)
     }
@@ -155,7 +169,7 @@ const FormationPage = () => {
     try {
       const token = await AsyncStorage.getItem("userToken")
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.")
+        showToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.")
         return
       }
 
@@ -174,7 +188,7 @@ const FormationPage = () => {
       setTitres(transformedTitres)
     } catch (error) {
       console.error("Error fetching titres:", error)
-      displayToast("error", "Erreur lors de la récupération des titres. Veuillez réessayer.")
+      showToast("error", "Erreur lors de la récupération des titres. Veuillez réessayer.")
     } finally {
       setLoading(false)
     }
@@ -186,7 +200,7 @@ const FormationPage = () => {
     try {
       const token = await AsyncStorage.getItem("userToken")
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.")
+        showToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.")
         return
       }
 
@@ -207,7 +221,7 @@ const FormationPage = () => {
       setTypes(transformedTypes)
     } catch (error) {
       console.error("Error fetching types:", error)
-      displayToast("error", "Erreur lors de la récupération des types. Veuillez réessayer.")
+      showToast("error", "Erreur lors de la récupération des types. Veuillez réessayer.")
     } finally {
       setLoading(false)
     }
@@ -216,7 +230,7 @@ const FormationPage = () => {
   // Fetch themes by typeId
   const fetchThemesByTypeId = async (typeId: string) => {
     if (!selectedTitre) {
-      displayToast("error", "Aucun titre sélectionné.")
+      showToast("error", "Aucun titre sélectionné.")
       return
     }
 
@@ -224,7 +238,7 @@ const FormationPage = () => {
     try {
       const token = await AsyncStorage.getItem("userToken")
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.")
+        showToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.")
         return
       }
 
@@ -249,7 +263,7 @@ const FormationPage = () => {
       setThemes(transformedThemes)
     } catch (error) {
       console.error("Error fetching themes:", error)
-      displayToast("error", "Erreur lors de la récupération des thèmes. Veuillez réessayer.")
+      showToast("error", "Erreur lors de la récupération des thèmes. Veuillez réessayer.")
     } finally {
       setLoading(false)
     }
@@ -271,13 +285,13 @@ const FormationPage = () => {
         const selectedFile = result.assets[0]
         setFile(selectedFile)
         console.log("File selected:", selectedFile.name)
-        displayToast("success", `Fichier "${selectedFile.name}" sélectionné`)
+        showToast("success", `Fichier "${selectedFile.name}" sélectionné`)
       } else {
         console.log("No file selected.")
       }
     } catch (err) {
       console.error("Error picking file:", err)
-      displayToast("error", "Une erreur est survenue lors de la sélection du fichier.")
+      showToast("error", "Une erreur est survenue lors de la sélection du fichier.")
     }
   }
 
@@ -354,42 +368,34 @@ const FormationPage = () => {
   // Validate form
   const validateForm = () => {
     if (!selectedTitre) {
-      displayToast("error", "Veuillez sélectionner un titre.")
+      showToast("error", "Veuillez sélectionner un titre.")
       return false
     }
 
     if (!selectedType) {
-      displayToast("error", "Veuillez sélectionner un type.")
+      showToast("error", "Veuillez sélectionner un type.")
       return false
     }
 
     if (!selectedTheme) {
-      displayToast("error", "Veuillez sélectionner un thème.")
+      showToast("error", "Veuillez sélectionner un thème.")
       return false
     }
 
     if (!texteDemande.trim()) {
-      displayToast("error", "Veuillez entrer une description pour votre demande.")
+      showToast("error", "Veuillez entrer une description pour votre demande.")
       return false
     }
 
     if (!nbrJours.trim() || isNaN(Number(nbrJours)) || Number(nbrJours) <= 0) {
-      displayToast("error", "Veuillez entrer un nombre de jours valide.")
+      showToast("error", "Veuillez entrer un nombre de jours valide.")
       return false
     }
 
     return true
   }
 
-  // Display toast message
-  const displayToast = (type: "success" | "error", message: string) => {
-    setToastType(type)
-    setToastMessage(message)
-    setShowToast(true)
-    setTimeout(() => {
-      setShowToast(false)
-    }, 3000)
-  }
+
 
   // Handle form submission
   const handleSubmit = async () => {
@@ -403,7 +409,7 @@ const FormationPage = () => {
       const userInfoString = await AsyncStorage.getItem("userInfo")
 
       if (!userInfoString) {
-        displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.")
+        showToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.")
         setSubmitting(false)
         return
       }
@@ -412,7 +418,7 @@ const FormationPage = () => {
       const matPersId = userInfo.id
 
       if (!matPersId) {
-        displayToast("error", "Matricule utilisateur non trouvé. Veuillez vous reconnecter.")
+        showToast("error", "Matricule utilisateur non trouvé. Veuillez vous reconnecter.")
         setSubmitting(false)
         return
       }
@@ -442,7 +448,7 @@ const FormationPage = () => {
       const token = await AsyncStorage.getItem("userToken")
 
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour soumettre une demande.")
+        showToast("error", "Vous devez être connecté pour soumettre une demande.")
         setSubmitting(false)
         return
       }
@@ -457,9 +463,10 @@ const FormationPage = () => {
           },
         },
       )
+      showToast("success", "Demande de formation soumise avec succès!", true);
 
       if (response.status === 200) {
-        displayToast("success", "Demande de formation soumise avec succès!")
+        showToast("success", "Demande de formation soumise avec succès!", true);
         // Reset form
         setTexteDemande("")
         setNbrJours("")
@@ -473,11 +480,11 @@ const FormationPage = () => {
       console.error("Error submitting form:", error)
       if (axios.isAxiosError(error)) {
         console.error("Server Response:", error.response?.data)
-        displayToast("error", error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.")
+        showToast("error", error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.")
       } else if (error instanceof Error) {
-        displayToast("error", error.message)
+        showToast("error", error.message)
       } else {
-        displayToast("error", "Une erreur inconnue est survenue.")
+        showToast("error", "Une erreur inconnue est survenue.")
       }
     } finally {
       setSubmitting(false)
@@ -494,7 +501,7 @@ const FormationPage = () => {
         {/* Form Header */}
         <View style={[styles.formHeader, themeStyles.card]}>
           <View style={styles.formHeaderIcon}>
-            <FileText size={24} color={isDarkMode ? "#0e135f" : "#0e135f"} />
+            <FileText size={24} color={isDarkMode ? "#CCCCCC" : "#0e135f"} />
           </View>
           <View style={styles.formHeaderContent}>
             <Text style={[styles.formHeaderTitle, themeStyles.text]}>Nouvelle demande de formation</Text>
@@ -512,7 +519,7 @@ const FormationPage = () => {
               Date de début <Text style={styles.required}>*</Text>
             </Text>
             <TouchableOpacity style={[styles.inputContainer, themeStyles.inputContainer]} onPress={showDatePicker}>
-              <Calendar size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Calendar size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.text]}>
                 {dateDebut.toLocaleDateString("fr-FR", {
                   day: "2-digit",
@@ -529,7 +536,7 @@ const FormationPage = () => {
               Nombre de jours <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputContainer, themeStyles.inputContainer]}>
-              <Clock size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Clock size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <TextInput
                 style={[styles.inputText, themeStyles.text]}
                 placeholder="Entrez le nombre de jours"
@@ -551,14 +558,14 @@ const FormationPage = () => {
               onPress={() => openModal("titre")}
               disabled={loading}
             >
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.text]}>
                 {selectedTitre ? selectedTitre.name : "Sélectionner un titre"}
               </Text>
               {loading ? (
-                <ActivityIndicator size="small" color="#0e135f" style={styles.dropdownIcon} />
+                <ActivityIndicator size="small" color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.dropdownIcon} />
               ) : (
-                <ChevronDown size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} style={styles.dropdownIcon} />
+                <ChevronDown size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.dropdownIcon} />
               )}
             </TouchableOpacity>
           </View>
@@ -573,7 +580,7 @@ const FormationPage = () => {
               onPress={() => selectedTitre && openModal("type")}
               disabled={!selectedTitre || loading}
             >
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.text, !selectedTitre && themeStyles.disabledText]}>
                 {selectedType
                   ? selectedType.name
@@ -584,7 +591,7 @@ const FormationPage = () => {
               {loading ? (
                 <ActivityIndicator size="small" color="#0e135f" style={styles.dropdownIcon} />
               ) : (
-                <ChevronDown size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} style={styles.dropdownIcon} />
+                <ChevronDown size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.dropdownIcon} />
               )}
             </TouchableOpacity>
           </View>
@@ -599,7 +606,7 @@ const FormationPage = () => {
               onPress={() => selectedType && openModal("theme")}
               disabled={!selectedType || loading}
             >
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.text, !selectedType && themeStyles.disabledText]}>
                 {selectedTheme
                   ? selectedTheme.name
@@ -621,7 +628,7 @@ const FormationPage = () => {
               Description <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.textAreaContainer, themeStyles.inputContainer]}>
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textArea, themeStyles.text]}
                 multiline
@@ -638,14 +645,14 @@ const FormationPage = () => {
           <View style={styles.formGroup}>
             <Text style={[styles.label, themeStyles.text]}>Pièce jointe (optionnel)</Text>
             <TouchableOpacity style={[styles.inputContainer, themeStyles.inputContainer]} onPress={handleFileUpload}>
-              <Paperclip size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Paperclip size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.subtleText]}>
                 {file ? file.name : "Sélectionner un fichier"}
               </Text>
             </TouchableOpacity>
             {file && (
               <View style={styles.fileInfo}>
-                <FileText size={16} color={isDarkMode ? "#0e135f" : "#0e135f"} />
+                <FileText size={16} color={isDarkMode ? "#CCCCCC" : "#0e135f"} />
                 <Text style={[styles.fileName, themeStyles.subtleText]} numberOfLines={1} ellipsizeMode="middle">
                   {file.name}
                 </Text>
@@ -780,22 +787,13 @@ const FormationPage = () => {
         </Modal>
       </ScrollView>
 
-      {/* Toast Message */}
-      {showToast && (
-        <View
-          style={[
-            styles.toast,
-            toastType === "success" ? styles.toastSuccess : styles.toastError,
-            { bottom: 70 }, // Position above footer
-          ]}
-        >
-          {toastType === "success" ? <CheckCircle size={20} color="#FFFFFF" /> : <XCircle size={20} color="#FFFFFF" />}
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      )}
-
+      
       {/* Footer */}
       <Footer />
+
+      {/* Custom Toast Component */}
+      <Toast />
+
     </SidebarLayout>
   )
 }
@@ -990,7 +988,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgb(18, 16, 36)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1057,35 +1055,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  toast: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  toastSuccess: {
-    backgroundColor: "#4CAF50",
-  },
-  toastError: {
-    backgroundColor: "#F44336",
-  },
-  toastText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-    marginLeft: 8,
-    flex: 1,
-  },
+ 
 })
 
 const lightStyles = StyleSheet.create({
@@ -1127,11 +1097,11 @@ const lightStyles = StyleSheet.create({
 
 const darkStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#121212",
+    backgroundColor: "#1a1f38",
   },
   header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderBottomColor: "#2D2F3DFA",
   },
   text: {
     color: "#E0E0E0",
@@ -1143,20 +1113,20 @@ const darkStyles = StyleSheet.create({
     color: "#666666",
   },
   card: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderColor: "#2D2F3DFA",
     borderWidth: 1,
     shadowColor: "transparent",
   },
   inputContainer: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderColor: "#2D2F3DFA",
   },
   noteContainer: {
     backgroundColor: "rgba(255, 193, 7, 0.05)",
   },
   modalItem: {
-    borderBottomColor: "#333333",
+    borderBottomColor: "#2D2F3DFA",
   },
 })
 

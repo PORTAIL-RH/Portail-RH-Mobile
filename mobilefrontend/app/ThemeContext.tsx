@@ -4,7 +4,7 @@ import { useColorScheme } from "react-native";
 
 type ThemeContextType = {
   isDarkMode: boolean;
-  toggleTheme: () => void;
+  toggleTheme: () => Promise<void>;
   isThemeLoaded: boolean;
 };
 
@@ -15,48 +15,54 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
 
+  // Load theme preference
   useEffect(() => {
-    const loadThemePreference = async () => {
+    const loadTheme = async () => {
       try {
-        const storedTheme = await AsyncStorage.getItem("@theme_mode");
-        if (storedTheme) {
-          setIsDarkMode(storedTheme === "dark");
-        } else if (systemColorScheme === "dark") {
-          setIsDarkMode(true);
+        const savedTheme = await AsyncStorage.getItem("@theme_mode");
+        
+        if (savedTheme !== null) {
+          setIsDarkMode(savedTheme === "dark");
+        } else {
+          setIsDarkMode(systemColorScheme === "dark");
         }
       } catch (error) {
-        console.error("Error loading theme preference:", error);
+        console.error("Failed to load theme", error);
+        setIsDarkMode(false);
       } finally {
         setIsThemeLoaded(true);
       }
     };
 
-    loadThemePreference();
+    loadTheme();
   }, [systemColorScheme]);
 
   const toggleTheme = async () => {
-    const newThemeMode = !isDarkMode;
-    setIsDarkMode(newThemeMode);
-    await AsyncStorage.setItem("@theme_mode", newThemeMode ? "dark" : "light");
-  };
-
-  const value: ThemeContextType = {
-    isDarkMode,
-    toggleTheme,
-    isThemeLoaded,
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    
+    try {
+      await AsyncStorage.setItem("@theme_mode", newMode ? "dark" : "light");
+      console.log("Theme saved:", newMode ? "dark" : "light");
+    } catch (error) {
+      console.error("Failed to save theme", error);
+    }
   };
 
   return (
-    <ThemeContext.Provider value={value}>
-      {isThemeLoaded ? children : null}
+    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, isThemeLoaded }}>
+      {children}
     </ThemeContext.Provider>
   );
 };
 
-export const useTheme = () => {
+export const useTheme = (): ThemeContextType => {
   const context = useContext(ThemeContext);
   if (!context) {
     throw new Error("useTheme must be used within a ThemeProvider");
   }
   return context;
 };
+
+// Add default export to fix the warning
+export default ThemeProvider;

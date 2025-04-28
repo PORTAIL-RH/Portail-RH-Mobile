@@ -11,6 +11,7 @@ import {
   Modal,
   FlatList,
   Platform,
+  Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -31,6 +32,7 @@ import {
 import Footer from "../../Components/Footer";
 import { API_CONFIG } from "../../config/apiConfig";
 import SidebarLayout from "./SidebarLayout";
+import Toast from 'react-native-toast-message';
 
 // Define the navigation stack types
 export type RootStackParamList = {
@@ -44,10 +46,8 @@ export type RootStackParamList = {
   PretAvance: undefined;
 };
 
-// Define the navigation prop type
 type PretAvanceNavigationProp = NativeStackNavigationProp<RootStackParamList, "PretAvance">;
 
-// Define the type for the file state
 type DocumentPickerAsset = {
   uri: string;
   name: string;
@@ -60,9 +60,6 @@ const PretAvancePage = () => {
   const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [toastType, setToastType] = useState<"success" | "error">("success");
 
   // Form state
   const [typeAvance, setTypeAvance] = useState("");
@@ -72,12 +69,27 @@ const PretAvancePage = () => {
   const [typesAvance, setTypesAvance] = useState<[string, unknown][]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredTypes, setFilteredTypes] = useState<[string, unknown][]>([]);
-  const [file, setFile] = useState<DocumentPickerAsset | null>(null); // File state
+  const [file, setFile] = useState<DocumentPickerAsset | null>(null);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
 
-  // Load theme preference and fetch data on component mount
+
+  const showToast = (type: 'success' | 'error', message: string, shouldNavigate = false) => {
+    Toast.show({
+      type,
+      text1: type === 'success' ? 'Succès' : 'Erreur',
+      text2: message,
+      position: 'bottom',
+      visibilityTime: 3000,
+      onHide: () => {
+        if (shouldNavigate) {
+          navigation.navigate('AccueilCollaborateur');
+        }
+      }
+    });
+  };
+
   useEffect(() => {
     const loadData = async () => {
       await loadThemePreference();
@@ -87,7 +99,6 @@ const PretAvancePage = () => {
     loadData();
   }, []);
 
-  // Load theme preference from AsyncStorage
   const loadThemePreference = async () => {
     try {
       const storedTheme = await AsyncStorage.getItem("@theme_mode");
@@ -99,7 +110,6 @@ const PretAvancePage = () => {
     }
   };
 
-  // Fetch user info from AsyncStorage
   const fetchUserInfo = async () => {
     try {
       const userInfoString = await AsyncStorage.getItem("userInfo");
@@ -112,13 +122,12 @@ const PretAvancePage = () => {
     }
   };
 
-  // Fetch available advance types from API
   const fetchTypesAvance = async () => {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem("userToken");
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.");
+        showToast("error", "Vous devez être connecté pour accéder à cette fonctionnalité.");
         return;
       }
 
@@ -133,157 +142,127 @@ const PretAvancePage = () => {
       setFilteredTypes(types);
     } catch (error) {
       console.error("Error fetching types of advances:", error);
-      displayToast("error", "Erreur lors de la récupération des types d'avance. Veuillez réessayer.");
+      showToast("error", "Erreur lors de la récupération des types d'avance. Veuillez réessayer.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Toggle theme between light and dark mode
   const toggleTheme = async () => {
     const newTheme = isDarkMode ? "light" : "dark";
     setIsDarkMode(!isDarkMode);
     try {
+      await AsyncStorage.setItem("theme", newTheme);
       await AsyncStorage.setItem("@theme_mode", newTheme);
     } catch (error) {
       console.error("Error saving theme preference:", error);
     }
   };
 
-  // Apply theme styles
   const themeStyles = isDarkMode ? darkStyles : lightStyles;
 
-  // Open modal for type selection
   const openModal = () => {
     setSearchQuery("");
     setFilteredTypes(typesAvance);
     setModalVisible(true);
   };
 
-  // Filter types in modal
   const filterTypes = (query: string) => {
     setSearchQuery(query);
-
-    if (query.trim() === "") {
-      setFilteredTypes(typesAvance);
-    } else {
-      const filtered = typesAvance.filter(([type]) => type.toLowerCase().includes(query.toLowerCase()));
-      setFilteredTypes(filtered);
-    }
+    setFilteredTypes(
+      query.trim() === "" 
+        ? typesAvance 
+        : typesAvance.filter(([type]) => type.toLowerCase().includes(query.toLowerCase()))
+    );
   };
 
-  // Handle type selection
   const handleSelectType = (type: string, max: unknown) => {
     setTypeAvance(type);
     setMontantMax(String(max));
     setModalVisible(false);
   };
 
-  // Handle file upload
   const handleFileUpload = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*", // Allow all file types
+        type: "*/*",
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedFile = result.assets[0];
         setFile(selectedFile);
-        displayToast("success", `Fichier "${selectedFile.name}" sélectionné`);
-      } else {
-        console.log("File selection cancelled by the user.");
+        showToast("success", `Fichier "${selectedFile.name}" sélectionné`);
       }
     } catch (err) {
       console.error("Error picking file:", err);
-      displayToast("error", "Une erreur est survenue lors de la sélection du fichier.");
+      showToast("error", "Une erreur est survenue lors de la sélection du fichier.");
     }
   };
 
-  // Remove file
   const removeFile = () => {
     setFile(null);
   };
 
-  // Display toast message
-  const displayToast = (type: "success" | "error", message: string) => {
-    console.log(`Displaying toast: type=${type}, message=${message}`); // Debug log
-    setToastType(type);
-    setToastMessage(message);
-    setShowToast(true);
-    setTimeout(() => {
-      console.log("Hiding toast"); // Debug log
-      setShowToast(false);
-    }, 5000); // Increased timeout to 5 seconds
-  };
-
-  // Validate form
   const validateForm = () => {
     if (!typeAvance.trim()) {
-      displayToast("error", "Veuillez sélectionner un type d'avance.");
+      showToast("error", "Veuillez sélectionner un type d'avance.");
       return false;
     }
 
     if (!montant.trim() || isNaN(Number(montant))) {
-      displayToast("error", "Veuillez entrer un montant valide.");
+      showToast("error", "Veuillez entrer un montant valide.");
       return false;
     }
 
     if (Number(montant) <= 0) {
-      displayToast("error", "Le montant doit être supérieur à 0.");
+      showToast("error", "Le montant doit être supérieur à 0.");
       return false;
     }
 
     if (Number(montant) > Number(montantMax)) {
-      displayToast("error", `Le montant ne doit pas dépasser ${montantMax} € pour ce type d'avance.`);
+      showToast("error", `Le montant ne doit pas dépasser ${montantMax} € pour ce type d'avance.`);
       return false;
     }
 
     if (!matPersId) {
-      displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
+      showToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
       return false;
     }
 
     return true;
   };
 
-  // Handle form submission
   const handleSubmit = async () => {
-    console.log("Form submitted"); // Debug log
-    if (!validateForm()) {
-      console.log("Form validation failed"); // Debug log
-      return;
-    }
-  
+    if (!validateForm()) return;
+
     setSubmitting(true);
-  
+    Keyboard.dismiss();
+
     try {
-      console.log("Submitting form..."); // Debug log
       const token = await AsyncStorage.getItem("userToken");
       if (!token) {
-        displayToast("error", "Vous devez être connecté pour soumettre une demande.");
+        showToast("error", "Vous devez être connecté pour soumettre une demande.");
         setSubmitting(false);
         return;
       }
-  
-      // Fetch user info to get `codeSoc`
+
       const userInfoString = await AsyncStorage.getItem("userInfo");
       if (!userInfoString) {
-        displayToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
+        showToast("error", "Informations utilisateur non trouvées. Veuillez vous reconnecter.");
         setSubmitting(false);
         return;
       }
+      
       const userInfo = JSON.parse(userInfoString);
-      const codeSoc = userInfo.code_soc; // Ensure this matches the key in your userInfo object
-  
-      // Prepare form data
+      const codeSoc = userInfo.code_soc;
+
       const formData = new FormData();
-      formData.append("type", typeAvance); // Use "type" instead of "typeDemande"
-      formData.append("montant", montant.toString()); // Convert montant to string
-      formData.append("texteDemande", "Demande de prêt/avance"); // Add a default or dynamic value
-      formData.append("matPersId", matPersId); // Use "matPersId" instead of "matPers[id]"
-      formData.append("codeSoc", codeSoc); // Add codeSoc
-  
-      // Append the file if it exists
+      formData.append("type", typeAvance);
+      formData.append("montant", montant);
+      formData.append("texteDemande", "Demande de prêt/avance");
+      formData.append("matPersId", matPersId);
+      formData.append("codeSoc", codeSoc);
+
       if (file) {
         const fileUri = Platform.OS === "android" ? file.uri : file.uri.replace("file://", "");
         formData.append("file", {
@@ -292,8 +271,7 @@ const PretAvancePage = () => {
           type: file.mimeType || "application/octet-stream",
         } as any);
       }
-  
-      // Submit the form
+
       const response = await axios.post(
         `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-pre-avance/create`,
         formData,
@@ -302,56 +280,55 @@ const PretAvancePage = () => {
             "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${token}`,
           },
-        },
+        }
       );
-  
-      // Handle successful response
+      showToast('success', 'Demande soumise avec succès !', true);
+
       if (response.status === 200) {
-        displayToast("success", "Demande soumise avec succès !");
-  
-        // Reset form fields
-        setTypeAvance("");
-        setMontant("");
-        setMontantMax("");
+        showToast('success', 'Demande soumise avec succès !', true);
+
+        // Réinitialisation du formulaire
+        setTypeAvance('');
+        setMontant('');
+        setMontantMax('');
         setFile(null);
-  
-        // Delay navigation to ensure the toast is displayed
-        setTimeout(() => {
-          navigation.navigate("AccueilCollaborateur");
-        }, 5000); // 5 seconds delay
       }
     } catch (error) {
-      console.error("Erreur lors de la soumission du formulaire :", error);
-      if (axios.isAxiosError(error)) {
-        console.error("Réponse d'erreur :", error.response?.data);
-        displayToast("error", error.response?.data?.message || "Une erreur est survenue lors de l'envoi de la demande.");
-      } else if (error instanceof Error) {
-        displayToast("error", error.message);
-      } else {
-        displayToast("error", "Une erreur inconnue est survenue.");
-      }
+      console.error('Erreur lors de la soumission:', error);
+      showToast('error', 
+        axios.isAxiosError(error) 
+          ? error.response?.data?.message || 'Erreur lors de la soumission'
+          : 'Une erreur est survenue'
+      );
     } finally {
-      console.log("Form submission complete"); // Debug log
       setSubmitting(false);
     }
   };
+
+
   return (
     <SidebarLayout title="Demande de prêt/avance">
+      <View style={{ flex: 1 }}>
+        
       <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Form Header */}
         <View style={[styles.formHeader, themeStyles.card]}>
           <View style={styles.formHeaderIcon}>
-            <DollarSign size={24} color={isDarkMode ? "#0e135f" : "#0e135f"} />
+            <DollarSign size={24} color={isDarkMode ? "#CCCCCC" : "#0e135f"} />
           </View>
           <View style={styles.formHeaderContent}>
             <Text style={[styles.formHeaderTitle, themeStyles.text]}>Nouvelle demande de prêt/avance</Text>
             <Text style={[styles.formHeaderSubtitle, themeStyles.subtleText]}>
               Remplissez le formulaire ci-dessous pour soumettre votre demande
             </Text>
+            <Text style={styles.required}>
+              "Pour un autre montant, veuillez contacter l'administrateur."
+            </Text>
+
           </View>
         </View>
 
@@ -367,7 +344,7 @@ const PretAvancePage = () => {
               onPress={openModal}
               disabled={loading}
             >
-              <FileText size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <FileText size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.text]}>
                 {typeAvance ? typeAvance : "Sélectionner un type d'avance"}
               </Text>
@@ -385,7 +362,7 @@ const PretAvancePage = () => {
               Montant <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputContainer, themeStyles.inputContainer]}>
-              <DollarSign size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <DollarSign size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <TextInput
                 style={[styles.inputText, themeStyles.text]}
                 placeholder="Entrez le montant"
@@ -404,7 +381,7 @@ const PretAvancePage = () => {
           <View style={styles.formGroup}>
             <Text style={[styles.label, themeStyles.text]}>Pièce jointe (optionnel)</Text>
             <TouchableOpacity style={[styles.inputContainer, themeStyles.inputContainer]} onPress={handleFileUpload}>
-              <Paperclip size={20} color={isDarkMode ? "#0e135f" : "#0e135f"} style={styles.inputIcon} />
+              <Paperclip size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
               <Text style={[styles.inputText, themeStyles.subtleText]}>
                 {file ? file.name : "Sélectionner un fichier"}
               </Text>
@@ -445,7 +422,6 @@ const PretAvancePage = () => {
               </>
             )}
           </TouchableOpacity>
-
         </View>
       </ScrollView>
 
@@ -510,26 +486,16 @@ const PretAvancePage = () => {
         </View>
       </Modal>
 
-      {/* Toast Message */}
-      {showToast && (
-        <View
-          style={[
-            styles.toast,
-            toastType === "success" ? styles.toastSuccess : styles.toastError,
-            { bottom: 70 }, // Position above footer
-          ]}
-        >
-          {toastType === "success" ? <CheckCircle size={20} color="#FFFFFF" /> : <XCircle size={20} color="#FFFFFF" />}
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      )}
-
       {/* Footer */}
       <Footer />
+
+      {/* Custom Toast Component */}
+      <Toast />
+
+      </View>
     </SidebarLayout>
   );
 };
-
 // Styles
 const styles = StyleSheet.create({
   scrollContainer: {
@@ -633,7 +599,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0e135f",
+    backgroundColor: "#181E33",
     borderRadius: 8,
     paddingVertical: 14,
     marginTop: 8,
@@ -663,7 +629,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgb(18, 16, 36)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -738,36 +704,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  toast: {
-    position: "absolute",
-    bottom: 70, // Position above footer
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 1000, // Ensure the toast is above other components
-  },
-  toastSuccess: {
-    backgroundColor: "#4CAF50",
-  },
-  toastError: {
-    backgroundColor: "#F44336",
-  },
-  toastText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-    marginLeft: 8,
-    flex: 1,
-  },
+ 
 });
 
 // Theme-specific styles
@@ -810,11 +747,11 @@ const lightStyles = StyleSheet.create({
 
 const darkStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#121212",
+    backgroundColor: "#1a1f38",
   },
   header: {
-    backgroundColor: "#1E1E1E",
-    borderBottomColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderBottomColor: "#2D2F3DFA",
   },
   text: {
     color: "#E0E0E0",
@@ -826,20 +763,20 @@ const darkStyles = StyleSheet.create({
     color: "#666666",
   },
   card: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderColor: "#2D2F3DFA",
     borderWidth: 1,
     shadowColor: "transparent",
   },
   inputContainer: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333333",
+    backgroundColor: "#8989A733",
+    borderColor: "#2D2F3DFA",
   },
   noteContainer: {
     backgroundColor: "rgba(255, 193, 7, 0.05)",
   },
   modalItem: {
-    borderBottomColor: "#333333",
+    borderBottomColor: "#2D2F3DFA",
   },
 });
 
