@@ -34,7 +34,7 @@
         <mxCell id="2xbFjTFqxPm4LQRyunOm-7" value="S&#39;authentifier" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;movable=0;rotatable=0;deletable=0;editable=0;locked=1;connectable=0;" vertex="1" parent="1">
           <mxGeometry x="632" y="360" width="90" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="2xbFjTFqxPm4LQRyunOm-8" value="&lt;font style=&quot;font-size: 10px;&quot;&gt;Ajouter Service&lt;/font&gt;" style="shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;" vertex="1" parent="1">
+        <mxCell id="2xbFjTFqxPm4LQRyunOm-8" value="&lt;font style=&quot;font-size: 10px;&quot;&gt;Ajouter Société&lt;/font&gt;" style="shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;" vertex="1" parent="1">
           <mxGeometry x="430" y="200" width="880" height="1000" as="geometry" />
         </mxCell>
         <mxCell id="2xbFjTFqxPm4LQRyunOm-9" value="Controlleur" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
