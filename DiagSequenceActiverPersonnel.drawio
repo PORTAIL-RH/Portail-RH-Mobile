@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36" version="26.2.14">
   <diagram name="Page-1" id="2YBvvXClWsGukQMizWep">
-    <mxGraphModel dx="1501" dy="818" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="2037" dy="1110" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -80,10 +80,10 @@
             <mxPoint x="200" y="795" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="LiHfCers7BduxrwoL8Yd-17" value="9: Personnel activée avec succès" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="275" y="769" width="200" height="30" as="geometry" />
+        <mxCell id="LiHfCers7BduxrwoL8Yd-17" value="10: Personnel activée avec succès" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="270" y="769" width="210" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="LiHfCers7BduxrwoL8Yd-18" value="6 :Personnel Activée" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=horizontal;curved=0;rounded=0;" edge="1" parent="1" source="LiHfCers7BduxrwoL8Yd-14">
+        <mxCell id="LiHfCers7BduxrwoL8Yd-18" value="7 :Personnel Activée" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=horizontal;curved=0;rounded=0;" edge="1" parent="1" source="LiHfCers7BduxrwoL8Yd-14">
           <mxGeometry x="-0.003" relative="1" as="geometry">
             <mxPoint x="914" y="644" as="sourcePoint" />
             <Array as="points">
@@ -93,7 +93,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="LiHfCers7BduxrwoL8Yd-19" value="7: Confirmer l&#39;activation" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+        <mxCell id="LiHfCers7BduxrwoL8Yd-19" value="8: Confirmer l&#39;activation" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
           <mxGeometry x="880" y="660" width="150" height="30" as="geometry" />
         </mxCell>
         <mxCell id="LiHfCers7BduxrwoL8Yd-20" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
@@ -105,7 +105,7 @@
             <mxPoint x="913.590909090909" y="684" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="LiHfCers7BduxrwoL8Yd-22" value="5: Confirmer Activation" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" target="LiHfCers7BduxrwoL8Yd-14">
+        <mxCell id="LiHfCers7BduxrwoL8Yd-22" value="6: Confirmer Activation" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" target="LiHfCers7BduxrwoL8Yd-14">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="530" y="601" as="sourcePoint" />
             <Array as="points">
@@ -117,7 +117,7 @@
         <mxCell id="LiHfCers7BduxrwoL8Yd-23" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="835" y="601" width="10" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="LiHfCers7BduxrwoL8Yd-24" value="8: message de confirmation" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+        <mxCell id="LiHfCers7BduxrwoL8Yd-24" value="9: message de confirmation" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
           <mxGeometry x="612" y="690" width="170" height="30" as="geometry" />
         </mxCell>
         <mxCell id="LiHfCers7BduxrwoL8Yd-25" value="" style="endArrow=classic;html=1;rounded=0;dashed=1;" edge="1" parent="1" source="LiHfCers7BduxrwoL8Yd-14">
@@ -145,7 +145,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="LiHfCers7BduxrwoL8Yd-30" value="5: Email d&#39;Activation envoyée au personnel activée" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" target="LiHfCers7BduxrwoL8Yd-14">
+        <mxCell id="LiHfCers7BduxrwoL8Yd-30" value="11: Email d&#39;Activation envoyée au personnel activée" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" target="LiHfCers7BduxrwoL8Yd-14">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="530" y="820" as="sourcePoint" />
             <Array as="points">
