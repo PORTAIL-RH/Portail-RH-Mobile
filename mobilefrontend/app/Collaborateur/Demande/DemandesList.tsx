@@ -20,7 +20,7 @@ interface Request {
   id: string
   type: string
   description: string
-  status: "pending" | "approved" | "rejected"
+  status: "pending" | "approved" | "rejected" 
   date: string
   time: string
   details: any
