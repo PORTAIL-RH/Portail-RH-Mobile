@@ -16,6 +16,8 @@ import {
   Image,
 } from "react-native"
 import axios from "axios"
+import { AxiosError } from 'axios';
+
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import AsyncStorage from "@react-native-async-storage/async-storage"
@@ -97,6 +99,9 @@ const Authentication = () => {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [theme, setTheme] = useState("light")
+
+  const [loginError, setLoginError] = useState<AxiosError<any> | null>(null);
+
 
   // Add these new state variables after the existing state declarations (around line 110)
   const [failedAttempts, setFailedAttempts] = useState(0)
@@ -232,100 +237,65 @@ const Authentication = () => {
 
     checkBlockStatus()
   }, [])
-
-  // Replace the handleLogin function with this updated version
+  
   const handleLogin = async () => {
-    if (isBlocked) {
-      const timeRemaining = blockExpiration ? Math.ceil((blockExpiration - Date.now()) / 60000) : 30
-      showToast("error", `Compte bloqué. Réessayez dans ${timeRemaining} minutes.`)
-      return
-    }
-
     if (!matricule || !password) {
-      showToast("error", "Matricule et mot de passe sont obligatoires")
-      return
+      showToast("error", "Matricule et mot de passe sont obligatoires");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
       const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`, {
         matricule,
-        motDePasse: password,
-      })
+        password
+      });
 
       if (response.status === 200) {
-        // Reset failed attempts on successful login
-        setFailedAttempts(0)
-        await AsyncStorage.setItem("failedAttempts", "0")
+        const { token, user } = response.data;
+        
+        // Store all user information
+        await AsyncStorage.multiSet([
+          ["userToken", token],
+          ["userId", user.id],
+          ["userInfo", JSON.stringify(user)],
+          ["userCodeSoc", user.code_soc || ""],
+          ["userService", user.serviceName || ""],
+          ["theme", theme]
+        ]);
 
-        const { token, id } = response.data
+        showToast("success", "Connexion réussie!");
 
-        // Fetch user details by ID
-        const userResponse = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        const userData = userResponse.data
-
-        // Extract the role, codeSoc, and Service from the user data
-        const role = userData.role
-        const codeSoc = userData.code_soc
-        const Service = userData.serviceName
-
-        // Check if the role is defined
-        if (!role) {
-          console.error("Role is undefined in the user data")
-          showToast("error", "Role information is missing")
-          setLoading(false)
-          return
-        }
-
-        // Store token, user ID, user details, codeSoc, and Service in AsyncStorage
-        await AsyncStorage.setItem("userToken", token)
-        await AsyncStorage.setItem("userId", id)
-        await AsyncStorage.setItem("userInfo", JSON.stringify(userData))
-        await AsyncStorage.setItem("userCodeSoc", codeSoc || "")
-        await AsyncStorage.setItem("userService", Service || "")
-        await AsyncStorage.setItem("theme", theme) // Save current theme
-
-        showToast("success", "Connexion réussie!")
-
-        // Navigate based on role
         setTimeout(() => {
-          if (role === "collaborateur") {
-            navigation.navigate("AccueilCollaborateur")
-          } else if (role === "admin" || role === "superviseur" || role === "RH" || role === "Chef Hiérarchique") {
-            navigation.navigate("AdminDashboard")
+          if (user.role === "collaborateur") {
+            navigation.navigate("AccueilCollaborateur");
+          } else if (["admin", "superviseur", "RH", "Chef Hiérarchique"].includes(user.role)) {
+            navigation.navigate("AdminDashboard");
           }
-        }, 2000)
+        }, 2000);
       }
-    } catch (error) {
-      console.error("Error logging in:", error)
-
-      // Increment failed attempts
-      const newFailedAttempts = failedAttempts + 1
-      setFailedAttempts(newFailedAttempts)
-      await AsyncStorage.setItem("failedAttempts", newFailedAttempts.toString())
-
-      // Check if user should be blocked
-      if (newFailedAttempts >= 5) {
-        // Block user for 30 minutes
-        const blockDuration = 30 * 60 * 1000 // 30 minutes in milliseconds
-        const expirationTime = Date.now() + blockDuration
-        setIsBlocked(true)
-        setBlockExpiration(expirationTime)
-        await AsyncStorage.setItem("blockedUntil", expirationTime.toString())
-
-        showToast("error", "Compte bloqué après 5 tentatives échouées. Réessayez dans 30 minutes.")
+    } catch (err: unknown) {
+      const error = err as AxiosError<any>;
+      setLoginError(error); // Save error for conditional rendering
+    
+      console.error("Error logging in:", error);
+    
+      if (error.response) {
+        if (error.response.data?.error === "Account locked") {
+          showToast("error", error.response.data.message || "Compte bloqué. Veuillez réessayer plus tard.");
+          return;
+        }
+    
+        showToast("error", error.response.data?.message || "Identifiants incorrects");
       } else {
-        showToast("error", `Identifiants incorrects (${newFailedAttempts}/5 tentatives)`)
+        showToast("error", "Erreur de connexion");
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+};
+  
+  
 
   const isDark = theme === "dark"
 
@@ -530,21 +500,18 @@ const Authentication = () => {
               )}
 
               {/* Add this block of code before the Submit Button in the return statement (around line 350) */}
-              {isBlocked && (
+              {loginError?.response?.data?.error === "Account locked" && (
                 <View style={styles.blockedMessage}>
                   <Feather name="lock" size={24} color="#F44336" style={styles.blockedIcon} />
                   <Text style={styles.blockedText}>
-                    Compte bloqué après 5 tentatives échouées.
-                    {blockExpiration && (
-                      <Text>
-                        {"\n"}Réessayez dans {Math.ceil((blockExpiration - Date.now()) / 60000)} minutes.
-                      </Text>
-                    )}
+                    {loginError.response.data.message || "Compte bloqué. Veuillez réessayer plus tard."}
                   </Text>
                 </View>
               )}
 
-              {/* Submit Button - matches web version */}
+              
+
+              {/* Submit Button */}
               <TouchableOpacity
                 style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                 onPress={action === "Login" ? handleLogin : handleSignUp}

@@ -209,12 +209,12 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
           {/* Champs spécifiques aux autorisations */}
           {selectedRequest.type && selectedRequest.type.toLowerCase().includes("autorisation") && (
             <>
-              {selectedRequest.details.heureSortie && selectedRequest.details.heureRetour  && (
+              {selectedRequest.details.horaireSortie && selectedRequest.details.horaireRetour  && (
                 <View style={styles.detailsItem}>
                   <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Heure de sortie/retour:</Text>
                   <Text style={[styles.detailsItemValue, themeStyles.text]}>
-                    {selectedRequest.details.heureSortie}:{selectedRequest.details.minuteSortie} →{" "}
-                    {selectedRequest.details.heureRetour}:{selectedRequest.details.minuteRetour}
+                    {selectedRequest.details.horaireSortie}:{selectedRequest.details.minuteSortie} →{" "}
+                    {selectedRequest.details.horaireRetour}:{selectedRequest.details.minuteRetour}
                   </Text>
                 </View>
               )}
@@ -285,7 +285,7 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
 
           {selectedRequest.details.titre && (
             <View style={styles.detailsItem}>
-              <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Titre:</Text>
+              <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Titre de formation:</Text>
               <Text style={[styles.detailsItemValue, themeStyles.text]}>
                 {renderSafeText(selectedRequest.details.titre)}
               </Text>
@@ -303,7 +303,7 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
 
           {selectedRequest.details.theme && (
             <View style={styles.detailsItem}>
-              <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Thème:</Text>
+              <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Thème de formation:</Text>
               <Text style={[styles.detailsItemValue, themeStyles.text]}>
                 {renderSafeText(selectedRequest.details.theme)}
               </Text>
@@ -320,6 +320,13 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
           {selectedRequest.details.typePreavance && !selectedRequest.details.typeFormation && (
             <View style={styles.detailsItem}>
               <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>Type de préavance:</Text>
+              <Text style={[styles.detailsItemValue, themeStyles.text]}>{selectedRequest.details.typePreavance}</Text>
+            </View>
+          )}
+
+          {selectedRequest.details.typePreavance && selectedRequest.type !== "formation" && (
+            <View style={styles.detailsItem}>
+              <Text style={[styles.detailsItemLabel, themeStyles.subtleText]}>typePreavance:</Text>
               <Text style={[styles.detailsItemValue, themeStyles.text]}>{selectedRequest.details.typePreavance}</Text>
             </View>
           )}
@@ -443,7 +450,7 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
                 style={[styles.detailsActionButton, themeStyles.detailsActionButton]}
                 onPress={() => onEdit(selectedRequest)}
               >
-                <Edit size={18} color={isDarkMode ? "#E0E0E0" : "#333"} />
+                <Edit size={18} color={isDarkMode ? "#E0E0E0" : "#E0E0E0"} />
                 <Text style={[styles.detailsActionButtonText, themeStyles.detailsActionButtonText]}>Modifier</Text>
               </TouchableOpacity>
             </>

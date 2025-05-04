@@ -118,8 +118,8 @@ interface Request {
     typeDocument?: string
     typePreavance?: string
     montant?: string
-    heureSortie?: string
-    heureRetour?: string
+    horaireSortie?: string
+    horaireRetour?: string
     minuteSortie?: string
     minuteRetour?: string
     matPers?: any
@@ -138,8 +138,8 @@ interface EditableRequestData {
   typeDocument?: string
   typePreavance?: string
   montant?: string
-  heureSortie?: string
-  heureRetour?: string
+  horaireSortie?: string
+  horaireRetour?: string
   minuteSortie?: string
   minuteRetour?: string
   startDate?: string
@@ -410,8 +410,8 @@ const DemandesPage = () => {
             item.filesReponse?.map((file: any) => renderSafeText(file?.filename) ?? "Aucun fichier fourni") ?? [],
           typePreavance: renderSafeText(item.type),
           montant: item.montant?.toString(),
-          heureSortie: renderSafeText(item.heureSortie),
-          heureRetour: renderSafeText(item.heureRetour),
+          horaireSortie: renderSafeText(item.horaireSortie),
+          horaireRetour: renderSafeText(item.horaireRetour),
           minuteSortie: renderSafeText(item.minuteSortie),
           minuteRetour: renderSafeText(item.minuteRetour),
         },
@@ -611,8 +611,8 @@ const DemandesPage = () => {
       endDate: endDateStr,
       periodeDebut: periodeDebutValue,
       periodeFin: periodeFinValue,
-      heureSortie: renderSafeText(request.details.heureSortie),
-      heureRetour: renderSafeText(request.details.heureRetour),
+      horaireSortie: renderSafeText(request.details.horaireSortie),
+      horaireRetour: renderSafeText(request.details.horaireRetour),
       minuteSortie: renderSafeText(request.details.minuteSortie),
       minuteRetour: renderSafeText(request.details.minuteRetour),
     })
@@ -953,15 +953,15 @@ const DemandesPage = () => {
           requestData.dateDebut = editableData.startDate
         }
 
-        if (editableData.heureSortie) {
-          const [hours, minutes] = editableData.heureSortie.split(":")
-          requestData.heureSortie = hours
+        if (editableData.horaireSortie && editableData.minuteSortie) {
+          const [hours, minutes] = editableData.horaireSortie.split(":")
+          requestData.horaireSortie = hours
           requestData.minuteSortie = minutes
         }
 
-        if (editableData.heureRetour) {
-          const [hours, minutes] = editableData.heureRetour.split(":")
-          requestData.heureRetour = hours
+        if (editableData.horaireRetour && editableData.minuteRetour) {
+          const [hours, minutes] = editableData.horaireRetour.split(":")
+          requestData.horaireRetour = hours
           requestData.minuteRetour = minutes
         }
       }

@@ -176,6 +176,24 @@ const ProfilePage = () => {
     }
   }, [])
 
+  // Load theme preference from AsyncStorage
+  useEffect(() => {
+    const loadThemePreference = async () => {
+      try {
+        const storedTheme = await AsyncStorage.getItem("theme")
+        if (storedTheme !== null) {
+          setIsDarkMode(storedTheme === "dark")
+        }
+        setLoading(false)
+      } catch (error) {
+        console.error("Error loading theme preference:", error)
+        setLoading(false)
+      }
+    }
+
+    loadThemePreference()
+  }, [])
+
   const toggleTheme = async () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)

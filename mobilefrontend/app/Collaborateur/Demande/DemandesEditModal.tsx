@@ -47,8 +47,8 @@ interface EditableRequestData {
   typeDocument?: string
   typePreavance?: string
   montant?: string
-  heureSortie?: string
-  heureRetour?: string
+  horaireSortie?: string
+  horaireRetour?: string
   startDate?: string
   endDate?: string
   duration?: string
@@ -95,8 +95,8 @@ interface Request {
     typeDocument?: string
     typePreavance?: string
     montant?: string
-    heureSortie?: string
-    heureRetour?: string
+    horaireSortie?: string
+    horaireRetour?: string
     periodeDebut?: string
     periodeFin?: string
   }
@@ -196,66 +196,72 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
   const descriptionInputRef = useRef<TextInput>(null)
 
-// Add timeout to all fetch requests
-  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 10000) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
+  // Add timeout to all fetch requests
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 30000) => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
     try {
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
-      return await response.json();
+      return await response.json()
     } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
+      clearTimeout(timeoutId)
+      throw error
     }
-  };
+  }
 
   // Fetch titres from API
 
-const fetchTitres = async () => {
-  try {
-    const token = await AsyncStorage.getItem("userToken");
-    if (!token) {
-      console.error("Authentication token not found");
-      return;
-    }
+  const fetchTitres = async (retryCount = 0, maxRetries = 3) => {
+    try {
+      const token = await AsyncStorage.getItem("userToken")
+      if (!token) {
+        console.error("Authentication token not found")
+        return
+      }
 
-    const data = await fetchWithTimeout(
-      `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/titres/`,
-      {
+      console.log("Fetching titres, attempt:", retryCount + 1)
+
+      const data = await fetchWithTimeout(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/titres/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+      })
+
+      const transformedTitres = data.map((titre: { id: string; titre: string }) => ({
+        id: titre.id,
+        name: titre.titre,
+      }))
+
+      setTitres(transformedTitres)
+
+      if (editableData.titre) {
+        const matchingTitre = transformedTitres.find((t) => t.name === editableData.titre)
+        if (matchingTitre) {
+          setSelectedTitreId(matchingTitre.id)
+          await fetchTypesByTitreId(matchingTitre.id)
+        }
       }
-    );
+    } catch (error) {
+      console.error("Error fetching titres:", error)
 
-    const transformedTitres = data.map((titre: { id: string; titre: string }) => ({
-      id: titre.id,
-      name: titre.titre,
-    }));
-
-    setTitres(transformedTitres);
-
-    if (editableData.titre) {
-      const matchingTitre = transformedTitres.find((t) => t.name === editableData.titre);
-      if (matchingTitre) {
-        setSelectedTitreId(matchingTitre.id);
-        await fetchTypesByTitreId(matchingTitre.id); // Make this await to ensure proper sequence
+      // Implement retry logic
+      if (retryCount < maxRetries) {
+        console.log(`Retrying fetch titres (${retryCount + 1}/${maxRetries})...`)
+        setTimeout(() => fetchTitres(retryCount + 1, maxRetries), 2000) // Wait 2 seconds before retrying
+      } else {
+        showToast("error", "Erreur", "La requête a pris trop de temps. Veuillez réessayer plus tard.")
       }
     }
-  } catch (error) {
-    console.error("Error fetching titres:", error);
-    showToast('error', 'Erreur', 'La requête a pris trop de temps. Veuillez réessayer.');
   }
-};
 
   // Fetch types by titreId
   const fetchTypesByTitreId = async (titreId: string) => {
@@ -427,12 +433,15 @@ const fetchTitres = async () => {
       switch (currentEditField) {
         case "dateDebut":
           setDateDebut(selectedDate)
-          // Format date as YYYY-MM-DD for the backend
-          const dateDebutStr = selectedDate.toISOString().split("T")[0]
+          // Format date as YYYY-MM-DD for the backend, ensuring correct day
+          const year = selectedDate.getFullYear()
+          const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+          const day = String(selectedDate.getDate()).padStart(2, "0")
+          const dateDebutStr = `${year}-${month}-${day}`
+
           setEditableData({
             ...editableData,
             startDate: dateDebutStr,
-            // Do NOT update the date field here, as that's the submission date
           })
 
           // If start date is after end date, update end date
@@ -440,33 +449,49 @@ const fetchTitres = async () => {
             const newEndDate = new Date(selectedDate)
             newEndDate.setDate(selectedDate.getDate() + 1)
             setDateFin(newEndDate)
+
+            const endYear = newEndDate.getFullYear()
+            const endMonth = String(newEndDate.getMonth() + 1).padStart(2, "0")
+            const endDay = String(newEndDate.getDate()).padStart(2, "0")
+            const dateFinStr = `${endYear}-${endMonth}-${endDay}`
+
             setEditableData((prev) => ({
               ...prev,
-              endDate: newEndDate.toISOString().split("T")[0],
+              endDate: dateFinStr,
             }))
           }
           break
         case "dateFin":
           setDateFin(selectedDate)
-          // Format date as YYYY-MM-DD for the backend
-          const dateFinStr = selectedDate.toISOString().split("T")[0]
+          // Format date as YYYY-MM-DD for the backend, ensuring correct day
+          const yearFin = selectedDate.getFullYear()
+          const monthFin = String(selectedDate.getMonth() + 1).padStart(2, "0")
+          const dayFin = String(selectedDate.getDate()).padStart(2, "0")
+          const dateFinStr = `${yearFin}-${monthFin}-${dayFin}`
+
           setEditableData({
             ...editableData,
             endDate: dateFinStr,
           })
           break
-        case "heureSortie":
+        case "horaireSortie":
           setTimeSortie(selectedDate)
+          const hoursSortie = selectedDate.getHours().toString().padStart(2, "0")
+          const minutesSortie = selectedDate.getMinutes().toString().padStart(2, "0")
           setEditableData({
             ...editableData,
-            heureSortie: formatTime(selectedDate),
+            horaireSortie: hoursSortie,
+            minuteSortie: minutesSortie,
           })
           break
-        case "heureRetour":
+        case "horaireRetour":
           setTimeRetour(selectedDate)
+          const hoursRetour = selectedDate.getHours().toString().padStart(2, "0")
+          const minutesRetour = selectedDate.getMinutes().toString().padStart(2, "0")
           setEditableData({
             ...editableData,
-            heureRetour: formatTime(selectedDate),
+            horaireRetour: hoursRetour,
+            minuteRetour: minutesRetour,
           })
           break
       }
@@ -491,10 +516,17 @@ const fetchTitres = async () => {
       // Pour les dates de début et fin
       if (editableData.startDate) {
         try {
-          const startDate = new Date(editableData.startDate)
-          if (!isNaN(startDate.getTime())) {
-            setDateDebut(startDate)
-            console.log("Start date initialized:", startDate.toLocaleDateString())
+          // Add time component and handle timezone properly
+          const startDateStr = editableData.startDate
+          // Ensure we're working with YYYY-MM-DD format
+          const [year, month, day] = startDateStr.split("-").map(Number)
+          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+            // Create date at noon to avoid timezone issues
+            const startDate = new Date(year, month - 1, day, 12, 0, 0)
+            if (!isNaN(startDate.getTime())) {
+              setDateDebut(startDate)
+              console.log("Start date initialized:", startDate.toLocaleDateString())
+            }
           }
         } catch (error) {
           console.error("Error parsing start date:", error)
@@ -503,10 +535,17 @@ const fetchTitres = async () => {
 
       if (editableData.endDate) {
         try {
-          const endDate = new Date(editableData.endDate)
-          if (!isNaN(endDate.getTime())) {
-            setDateFin(endDate)
-            console.log("End date initialized:", endDate.toLocaleDateString())
+          // Add time component and handle timezone properly
+          const endDateStr = editableData.endDate
+          // Ensure we're working with YYYY-MM-DD format
+          const [year, month, day] = endDateStr.split("-").map(Number)
+          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+            // Create date at noon to avoid timezone issues
+            const endDate = new Date(year, month - 1, day, 12, 0, 0)
+            if (!isNaN(endDate.getTime())) {
+              setDateFin(endDate)
+              console.log("End date initialized:", endDate.toLocaleDateString())
+            }
           }
         } catch (error) {
           console.error("Error parsing end date:", error)
@@ -514,22 +553,28 @@ const fetchTitres = async () => {
       }
 
       // Pour les heures de sortie et retour (autorisation)
-      if (editableData.heureSortie) {
+      if (editableData.horaireSortie && editableData.minuteSortie) {
         try {
-          const [hours, minutes] = editableData.heureSortie.split(":").map(Number)
           const sortieTime = new Date()
-          sortieTime.setHours(hours || 0, minutes || 0, 0)
+          sortieTime.setHours(
+            Number.parseInt(editableData.horaireSortie) || 0,
+            Number.parseInt(editableData.minuteSortie) || 0,
+            0,
+          )
           setTimeSortie(sortieTime)
         } catch (error) {
           console.error("Error parsing heure sortie:", error)
         }
       }
 
-      if (editableData.heureRetour) {
+      if (editableData.horaireRetour && editableData.minuteRetour) {
         try {
-          const [hours, minutes] = editableData.heureRetour.split(":").map(Number)
           const retourTime = new Date()
-          retourTime.setHours(hours || 0, minutes || 0, 0)
+          retourTime.setHours(
+            Number.parseInt(editableData.horaireRetour) || 0,
+            Number.parseInt(editableData.minuteRetour) || 0,
+            0,
+          )
           setTimeRetour(retourTime)
         } catch (error) {
           console.error("Error parsing heure retour:", error)
@@ -608,6 +653,49 @@ const fetchTitres = async () => {
       }
     }
   }, [editingRequest, titres.length, types.length, themes.length])
+
+  // Add a useEffect hook to calculate the number of days for congé requests
+  // Add this after the existing useEffect hooks
+
+  // Calculate number of days between start and end dates for congé requests
+  useEffect(() => {
+    if (editingRequest && editingRequest.type.toLowerCase().includes("congé")) {
+      try {
+        // Only calculate if we have both dates
+        if (dateDebut && dateFin) {
+          const oneDay = 24 * 60 * 60 * 1000 // hours*minutes*seconds*milliseconds
+          const diffTime = dateFin.getTime() - dateDebut.getTime()
+          const diffDays = Math.round(diffTime / oneDay) + 1 // Include both start and end days
+
+          // Adjust for half days based on periodeDebut and periodeFin
+          let adjustedDays = diffDays
+
+          // If periodeDebut is afternoon, subtract half a day
+          if (periodeDebut === "après-midi" || periodeDebut === "S") {
+            adjustedDays -= 0.5
+          }
+
+          // If periodeFin is morning, subtract half a day
+          if (periodeFin === "matin" || periodeFin === "M") {
+            adjustedDays -= 0.5
+          }
+
+          // Ensure we don't have negative days
+          const finalDays = Math.max(adjustedDays, 0)
+
+          // Update the duration in editableData
+          setEditableData((prev) => ({
+            ...prev,
+            duration: finalDays.toString(),
+          }))
+
+          console.log("Calculated days:", finalDays)
+        }
+      } catch (error) {
+        console.error("Error calculating days:", error)
+      }
+    }
+  }, [dateDebut, dateFin, periodeDebut, periodeFin, editingRequest])
 
   // Function to show toast messages
   const showToast = (type: "success" | "error" | "info", title: string, message: string) => {
@@ -1043,7 +1131,7 @@ const fetchTitres = async () => {
                           borderColor: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
                         },
                       ]}
-                      onPress={() => showDateTimePicker("time", "heureSortie")}
+                      onPress={() => showDateTimePicker("time", "horaireSortie")}
                     >
                       <Clock size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
                       <Text style={[styles.inputText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
@@ -1065,7 +1153,7 @@ const fetchTitres = async () => {
                           borderColor: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
                         },
                       ]}
-                      onPress={() => showDateTimePicker("time", "heureRetour")}
+                      onPress={() => showDateTimePicker("time", "horaireRetour")}
                     >
                       <Clock size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
                       <Text style={[styles.inputText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
@@ -1170,6 +1258,27 @@ const fetchTitres = async () => {
 
                     {showPeriodeFinSelector && renderPeriodeSelector("fin")}
                   </View>
+
+                  {/* Nombre de jours */}
+                  <View style={styles.formField}>
+                    <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
+                      Nombre de jours
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputContainer,
+                        {
+                          backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "#FFFFFF",
+                          borderColor: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
+                        },
+                      ]}
+                    >
+                      <Calendar size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
+                      <Text style={[styles.inputText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
+                        {editableData.duration || "0"} jour(s)
+                      </Text>
+                    </View>
+                  </View>
                 </>
               )}
 
@@ -1210,7 +1319,7 @@ const fetchTitres = async () => {
                   ? dateDebut
                   : currentEditField === "dateFin"
                     ? dateFin
-                    : currentEditField === "heureSortie"
+                    : currentEditField === "horaireSortie"
                       ? timeSortie
                       : timeRetour
               }
