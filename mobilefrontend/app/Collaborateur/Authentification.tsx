@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -14,49 +14,80 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
-} from "react-native"
-import axios from "axios"
-import { useNavigation } from "@react-navigation/native"
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import Toast from "react-native-toast-message" 
-import { API_CONFIG } from "../config/apiConfig"
-import { LinearGradient } from "expo-linear-gradient"
-import { Feather } from "@expo/vector-icons"
+  ActivityIndicator,
+} from "react-native";
+import axios from "axios";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Toast from "react-native-toast-message";
+import { API_CONFIG } from "../config/apiConfig";
+import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "@expo/vector-icons";
 
 // Define the navigation stack types
 type AuthentificationStackParamList = {
-  Authentification: undefined
-  AccueilCollaborateur: undefined
-  AdminDashboard: undefined
-}
+  Authentification: undefined;
+  AccueilCollaborateur: undefined;
+  AdminDashboard: undefined;
+};
 
 // Define the navigation prop type
-type AuthentificationNavigationProp = NativeStackNavigationProp<AuthentificationStackParamList, "Authentification">
+type AuthentificationNavigationProp = NativeStackNavigationProp<
+  AuthentificationStackParamList,
+  "Authentification"
+>;
+
+// Auth storage functions
+const storeAuthData = async (data: any) => {
+  try {
+    await AsyncStorage.setItem(
+      "authData",
+      JSON.stringify({
+        token: data.token,
+        userId: data.user.id,
+        userInfo: data.user,
+        timestamp: Date.now(),
+      })
+    );
+  } catch (error) {
+    console.error("Error storing auth data:", error);
+  }
+};
+
+const getAuthData = async () => {
+  try {
+    const data = await AsyncStorage.getItem("authData");
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error("Error retrieving auth data:", error);
+    return null;
+  }
+};
 
 // Mouse/Touch Effect Background Component
 const BackgroundWithMouseEffect = ({ theme }: { theme: string }) => {
   const [dimensions, setDimensions] = useState({
     width: Dimensions.get("window").width,
     height: Dimensions.get("window").height,
-  })
+  });
 
   // Animation value for the glow effect
   const animatedPosition = useRef(
     new Animated.ValueXY({
       x: dimensions.width / 2,
       y: dimensions.height / 2,
-    }),
-  ).current
+    })
+  ).current;
 
   // Update dimensions on orientation change
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
-      setDimensions({ width: window.width, height: window.height })
-    })
+      setDimensions({ width: window.width, height: window.height });
+    });
 
-    return () => subscription.remove()
-  }, [])
+    return () => subscription.remove();
+  }, []);
 
   // Create pan responder to track touch position
   const panResponder = PanResponder.create({
@@ -67,70 +98,70 @@ const BackgroundWithMouseEffect = ({ theme }: { theme: string }) => {
         toValue: { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY },
         useNativeDriver: false,
         friction: 5,
-      }).start()
+      }).start();
     },
-  })
+  });
 
-  const isDark = theme === "dark"
+  const isDark = theme === "dark";
 
   return (
     <View style={styles.backgroundContainer}>
-      {/* Rich gradient background - matches web version */}
       <LinearGradient
-        colors={isDark ? ["#1a1f38", "#2d3a65", "#1a1f38"] : ["#f0f4f8", "#e2eaf2", "#f0f4f8"]}
+        colors={
+          isDark
+            ? ["#1a1f38", "#2d3a65", "#1a1f38"]
+            : ["#f0f4f8", "#e2eaf2", "#f0f4f8"]
+        }
         start={{ x: 0.1, y: 0.1 }}
         end={{ x: 0.9, y: 0.9 }}
         style={styles.backgroundGradient}
       />
     </View>
-  )
-}
+  );
+};
 
 const Authentication = () => {
-  const navigation = useNavigation<AuthentificationNavigationProp>()
-  const [action, setAction] = useState<"Login" | "Sign up">("Login")
-  const [nom, setNom] = useState("") // Last name
-  const [prenom, setPrenom] = useState("") // First name
-  const [email, setEmail] = useState("")
-  const [matricule, setMatricule] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [theme, setTheme] = useState("light")
-
-  // Add these new state variables after the existing state declarations (around line 110)
-  const [failedAttempts, setFailedAttempts] = useState(0)
-  const [isBlocked, setIsBlocked] = useState(false)
-  const [blockExpiration, setBlockExpiration] = useState<number | null>(null)
+  const navigation = useNavigation<AuthentificationNavigationProp>();
+  const [action, setAction] = useState<"Login" | "Sign up">("Login");
+  const [nom, setNom] = useState("");
+  const [prenom, setPrenom] = useState("");
+  const [email, setEmail] = useState("");
+  const [matricule, setMatricule] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState("light");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockExpiration, setBlockExpiration] = useState<number | null>(null);
 
   // Initialize theme from AsyncStorage
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const savedTheme = await AsyncStorage.getItem("theme")
+        const savedTheme = await AsyncStorage.getItem("theme");
         if (savedTheme) {
-          setTheme(savedTheme)
+          setTheme(savedTheme);
         }
       } catch (error) {
-        console.error("Error loading theme:", error)
+        console.error("Error loading theme:", error);
       }
-    }
+    };
 
-    loadTheme()
-  }, [])
+    loadTheme();
+  }, []);
 
   // Toggle theme function
   const toggleTheme = async () => {
-    const newTheme = theme === "dark" ? "light" : "dark"
-    setTheme(newTheme)
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
     try {
-      // Update both keys for backward compatibility
-      await AsyncStorage.setItem("theme", newTheme)
-      await AsyncStorage.setItem("@theme_mode", newTheme)
+      await AsyncStorage.setItem("theme", newTheme);
+      await AsyncStorage.setItem("@theme_mode", newTheme);
     } catch (error) {
-      console.error("Error saving theme:", error)
+      console.error("Error saving theme:", error);
     }
-  }
+  };
 
   const showToast = (type: "success" | "error", message: string) => {
     Toast.show({
@@ -139,235 +170,272 @@ const Authentication = () => {
       text2: message,
       position: "bottom",
       visibilityTime: 4000,
-    })
-  }
+    });
+  };
 
   const handleSignUp = async () => {
     if (!nom || !prenom || !matricule || !email || !password || !confirmPassword) {
-      showToast("error", "Tous les champs sont obligatoires")
-      return
+      showToast("error", "Tous les champs sont obligatoires");
+      return;
     }
 
     if (!matricule.match(/^\d{5}$/)) {
-      showToast("error", "Le matricule doit être composé de 5 chiffres")
-      return
+      showToast("error", "Le matricule doit être composé de 5 chiffres");
+      return;
     }
 
     if (password !== confirmPassword) {
-      showToast("error", "Les mots de passe ne correspondent pas")
-      return
+      showToast("error", "Les mots de passe ne correspondent pas");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/register`, {
-        nom, // Last name
-        prenom, // First name
-        matricule,
-        email,
-        motDePasse: password,
-        confirmationMotDePasse: confirmPassword,
-        role: "collaborateur",
-        code_soc: "DEFAULT_CODE",
-        service: "DEFAULT_SERVICE",
-      })
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/register`,
+        {
+          nom,
+          prenom,
+          matricule,
+          email,
+          motDePasse: password,
+          confirmationMotDePasse: confirmPassword,
+          role: "collaborateur",
+          code_soc: "DEFAULT_CODE",
+          service: "DEFAULT_SERVICE",
+        }
+      );
 
       if (response.status === 200) {
-        showToast("success", "Enregistrement réussi! Votre compte est en attente d'activation.")
+        showToast(
+          "success",
+          "Enregistrement réussi! Votre compte est en attente d'activation."
+        );
 
-        // Clear form fields
-        setNom("")
-        setPrenom("")
-        setMatricule("")
-        setEmail("")
-        setPassword("")
-        setConfirmPassword("")
+        setNom("");
+        setPrenom("");
+        setMatricule("");
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
 
-        // Switch to login after successful registration
         setTimeout(() => {
-          setAction("Login")
-        }, 3000)
+          setAction("Login");
+        }, 3000);
       }
     } catch (error) {
-      console.error("Error signing up:", error)
-      showToast("error", "Une erreur est survenue lors de l'enregistrement")
+      console.error("Error signing up:", error);
+      showToast("error", "Une erreur est survenue lors de l'enregistrement");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  // Add this useEffect to check if the user is blocked when the component mounts
   useEffect(() => {
     const checkBlockStatus = async () => {
       try {
-        const blockedUntil = await AsyncStorage.getItem("blockedUntil")
+        const blockedUntil = await AsyncStorage.getItem("blockedUntil");
         if (blockedUntil) {
-          const expirationTime = Number.parseInt(blockedUntil, 10)
+          const expirationTime = Number.parseInt(blockedUntil, 10);
           if (expirationTime > Date.now()) {
-            // User is still blocked
-            setIsBlocked(true)
-            setBlockExpiration(expirationTime)
-            // Set a timeout to unblock the user when the block expires
-            const timeRemaining = expirationTime - Date.now()
+            setIsBlocked(true);
+            setBlockExpiration(expirationTime);
+            const timeRemaining = expirationTime - Date.now();
             setTimeout(() => {
-              setIsBlocked(false)
-              setFailedAttempts(0)
-              AsyncStorage.removeItem("blockedUntil")
-            }, timeRemaining)
+              setIsBlocked(false);
+              setFailedAttempts(0);
+              AsyncStorage.removeItem("blockedUntil");
+            }, timeRemaining);
           } else {
-            // Block has expired
-            AsyncStorage.removeItem("blockedUntil")
+            AsyncStorage.removeItem("blockedUntil");
           }
         }
 
-        // Load failed attempts
-        const attempts = await AsyncStorage.getItem("failedAttempts")
+        const attempts = await AsyncStorage.getItem("failedAttempts");
         if (attempts) {
-          setFailedAttempts(Number.parseInt(attempts, 10))
+          setFailedAttempts(Number.parseInt(attempts, 10));
         }
       } catch (error) {
-        console.error("Error checking block status:", error)
+        console.error("Error checking block status:", error);
       }
-    }
+    };
 
-    checkBlockStatus()
-  }, [])
+    checkBlockStatus();
+  }, []);
 
-  // Replace the handleLogin function with this updated version
   const handleLogin = async () => {
-    if (isBlocked) {
-      const timeRemaining = blockExpiration ? Math.ceil((blockExpiration - Date.now()) / 60000) : 30
-      showToast("error", `Compte bloqué. Réessayez dans ${timeRemaining} minutes.`)
-      return
+    if (!matricule?.trim() || !password?.trim()) {
+      showToast("error", "Matricule and password are required");
+      return;
     }
 
-    if (!matricule || !password) {
-      showToast("error", "Matricule et mot de passe sont obligatoires")
-      return
+    const blockedUntil = await AsyncStorage.getItem("blockedUntil");
+    if (blockedUntil && Date.now() < parseInt(blockedUntil)) {
+      const minutesLeft = Math.ceil((parseInt(blockedUntil) - Date.now()) / 60000);
+      showToast("error", `Account locked. Try again in ${minutesLeft} minutes.`);
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
+
     try {
-      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`, {
-        matricule,
-        motDePasse: password,
-      })
+      const loginPayload = {
+        matricule: matricule.trim(),
+        password: password.trim(),
+      };
 
-      if (response.status === 200) {
-        // Reset failed attempts on successful login
-        setFailedAttempts(0)
-        await AsyncStorage.setItem("failedAttempts", "0")
+      console.log("Login payload:", loginPayload);
 
-        const { token, id } = response.data
-
-        // Fetch user details by ID
-        const userResponse = await axios.get(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/byId/${id}`, {
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`,
+        loginPayload,
+        {
           headers: {
-            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
           },
-        })
+          timeout: 10000,
+        }
+      );
 
-        const userData = userResponse.data
+      if (response.data?.token) {
+        await storeAuthData({
+          token: response.data.token,
+          user: response.data.user,
+        });
 
-        // Extract the role, codeSoc, and Service from the user data
-        const role = userData.role
-        const codeSoc = userData.code_soc
-        const Service = userData.serviceName
+        await AsyncStorage.multiRemove(["failedAttempts", "blockedUntil"]);
+        setFailedAttempts(0);
 
-        // Check if the role is defined
-        if (!role) {
-          console.error("Role is undefined in the user data")
-          showToast("error", "Role information is missing")
-          setLoading(false)
-          return
+        showToast("success", "Login successful!");
+
+        setTimeout(() => {
+          const { role } = response.data.user;
+          if (role === "collaborateur") {
+            navigation.navigate("AccueilCollaborateur");
+          } else {
+            navigation.navigate("AdminDashboard");
+          }
+        }, 1500);
+      }
+    } catch (error: any) {
+      console.error("Login error:", error.response?.data || error.message);
+
+      if (error.response) {
+        const { status, data } = error.response;
+
+        if (status === 401 && data.error === "Account locked") {
+          const lockDuration = 30 * 60 * 1000;
+          const expirationTime = Date.now() + lockDuration;
+
+          await AsyncStorage.setItem("blockedUntil", expirationTime.toString());
+          setIsBlocked(true);
+          setBlockExpiration(expirationTime);
+
+          showToast("error", "Account locked. Try again in 30 minutes.");
+          return;
         }
 
-        // Store token, user ID, user details, codeSoc, and Service in AsyncStorage
-        await AsyncStorage.setItem("userToken", token)
-        await AsyncStorage.setItem("userId", id)
-        await AsyncStorage.setItem("userInfo", JSON.stringify(userData))
-        await AsyncStorage.setItem("userCodeSoc", codeSoc || "")
-        await AsyncStorage.setItem("userService", Service || "")
-        await AsyncStorage.setItem("theme", theme) // Save current theme
+        if (status === 401) {
+          const newAttempts = failedAttempts + 1;
+          setFailedAttempts(newAttempts);
+          await AsyncStorage.setItem("failedAttempts", newAttempts.toString());
 
-        showToast("success", "Connexion réussie!")
+          if (newAttempts >= 3) {
+            const lockDuration = 30 * 60 * 1000;
+            const expirationTime = Date.now() + lockDuration;
 
-        // Navigate based on role
-        setTimeout(() => {
-          if (role === "collaborateur") {
-            navigation.navigate("AccueilCollaborateur")
-          } else if (role === "admin" || role === "superviseur" || role === "RH" || role === "Chef Hiérarchique") {
-            navigation.navigate("AdminDashboard")
+            await AsyncStorage.setItem("blockedUntil", expirationTime.toString());
+            setIsBlocked(true);
+            setBlockExpiration(expirationTime);
+
+            showToast("error", "Too many attempts. Account locked for 30 minutes.");
+          } else {
+            showToast(
+              "error",
+              `Invalid credentials (${3 - newAttempts} attempts left)`
+            );
           }
-        }, 2000)
+          return;
+        }
+
+        if (status === 400) {
+          const errorMsg = data.message || "Invalid request format";
+          showToast("error", `Error: ${errorMsg}`);
+          return;
+        }
       }
-    } catch (error) {
-      console.error("Error logging in:", error)
 
-      // Increment failed attempts
-      const newFailedAttempts = failedAttempts + 1
-      setFailedAttempts(newFailedAttempts)
-      await AsyncStorage.setItem("failedAttempts", newFailedAttempts.toString())
-
-      // Check if user should be blocked
-      if (newFailedAttempts >= 5) {
-        // Block user for 30 minutes
-        const blockDuration = 30 * 60 * 1000 // 30 minutes in milliseconds
-        const expirationTime = Date.now() + blockDuration
-        setIsBlocked(true)
-        setBlockExpiration(expirationTime)
-        await AsyncStorage.setItem("blockedUntil", expirationTime.toString())
-
-        showToast("error", "Compte bloqué après 5 tentatives échouées. Réessayez dans 30 minutes.")
-      } else {
-        showToast("error", `Identifiants incorrects (${newFailedAttempts}/5 tentatives)`)
-      }
+      showToast(
+        "error",
+        error.message.includes("timeout")
+          ? "Connection timeout"
+          : "Network error. Please try again."
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const isDark = theme === "dark"
+  const isDark = theme === "dark";
 
   return (
-    <SafeAreaView style={[styles.safeArea, isDark ? styles.darkBackground : styles.lightBackground]}>
+    <SafeAreaView
+      style={[styles.safeArea, isDark ? styles.darkBackground : styles.lightBackground]}
+    >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* Background with mouse/touch effect - matches web version */}
       <BackgroundWithMouseEffect theme={theme} />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoidingView}>
-        <ScrollView contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
-          {/* Theme toggle button */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoidingView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollViewContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <TouchableOpacity
-            style={[styles.themeToggle, isDark ? styles.themeToggleDark : styles.themeToggleLight]}
+            style={[
+              styles.themeToggle,
+              isDark ? styles.themeToggleDark : styles.themeToggleLight,
+            ]}
             onPress={toggleTheme}
             activeOpacity={0.7}
           >
-            <Feather name={isDark ? "sun" : "moon"} size={24} color={isDark ? "white" : "#1a1f38"} />
+            <Feather
+              name={isDark ? "sun" : "moon"}
+              size={24}
+              color={isDark ? "white" : "#1a1f38"}
+            />
           </TouchableOpacity>
 
-          {/* Branding - matches web version */}
           <View style={styles.branding}>
             <Image
               source={require("../../assets/images/logo.png")}
-              style={[
-                styles.logo,
-                isDark && { tintColor: "white" }, // Only apply white tint in dark mode
-              ]}
+              style={[styles.logo, isDark && { tintColor: "white" }]}
               resizeMode="contain"
             />
           </View>
 
-          {/* Auth Card - matches web version */}
           <View style={[styles.authCard, isDark ? styles.authCardDark : styles.authCardLight]}>
-            {/* Header */}
             <View style={styles.header}>
-              <Text style={[styles.headerTitle, isDark ? styles.textLight : styles.textDark, styles.gradientText]}>
+              <Text
+                style={[
+                  styles.headerTitle,
+                  isDark ? styles.textLight : styles.textDark,
+                  styles.gradientText,
+                ]}
+              >
                 {action === "Login" ? "Connexion au portail RH" : "Créer un compte"}
               </Text>
 
-              <Text style={[styles.headerSubtitle, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
+              <Text
+                style={[
+                  styles.headerSubtitle,
+                  isDark ? styles.textLightSecondary : styles.textDarkSecondary,
+                ]}
+              >
                 {action === "Login"
                   ? "Entrez vos identifiants pour accéder à votre espace personnel"
                   : "Remplissez le formulaire pour créer votre compte"}
@@ -376,28 +444,56 @@ const Authentication = () => {
               <TouchableOpacity
                 style={styles.switchButton}
                 onPress={() => {
-                  setAction(action === "Login" ? "Sign up" : "Login")
-                  // Clear form fields
-                  setNom("")
-                  setPrenom("")
-                  setMatricule("")
-                  setEmail("")
-                  setPassword("")
-                  setConfirmPassword("")
+                  setAction(action === "Login" ? "Sign up" : "Login");
+                  setNom("");
+                  setPrenom("");
+                  setMatricule("");
+                  setEmail("");
+                  setPassword("");
+                  setConfirmPassword("");
                 }}
                 disabled={loading}
               >
-                <Text style={styles.switchText}>{action === "Login" ? "Créer un compte" : "Se connecter"}</Text>
+                <Text style={styles.switchText}>
+                  {action === "Login" ? "Créer un compte" : "Se connecter"}
+                </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Form Inputs */}
             <View style={styles.formContainer}>
+              {isBlocked && (
+                <View style={styles.blockedMessage}>
+                  <Feather
+                    name="lock"
+                    size={24}
+                    color="#F44336"
+                    style={styles.blockedIcon}
+                  />
+                  <Text style={styles.blockedText}>
+                    Compte bloqué après 3 tentatives échouées.
+                    {blockExpiration && (
+                      <Text>
+                        {"\n"}Réessayez dans{" "}
+                        {Math.ceil((blockExpiration - Date.now()) / 60000)}{" "}
+                        minutes.
+                      </Text>
+                    )}
+                  </Text>
+                </View>
+              )}
+
               {action === "Sign up" && (
                 <>
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Nom</Text>
-                    <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                      Nom
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputWrapper,
+                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                      ]}
+                    >
                       <Feather
                         name="user"
                         size={20}
@@ -407,7 +503,9 @@ const Authentication = () => {
                       <TextInput
                         style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                         placeholder="Votre nom"
-                        placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                        placeholderTextColor={
+                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                        }
                         value={nom}
                         onChangeText={setNom}
                         editable={!loading}
@@ -416,8 +514,15 @@ const Authentication = () => {
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Prénom</Text>
-                    <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                      Prénom
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputWrapper,
+                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                      ]}
+                    >
                       <Feather
                         name="user"
                         size={20}
@@ -427,7 +532,9 @@ const Authentication = () => {
                       <TextInput
                         style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                         placeholder="Votre prénom"
-                        placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                        placeholderTextColor={
+                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                        }
                         value={prenom}
                         onChangeText={setPrenom}
                         editable={!loading}
@@ -438,8 +545,15 @@ const Authentication = () => {
               )}
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Matricule</Text>
-                <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                  Matricule
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                  ]}
+                >
                   <Feather
                     name="hash"
                     size={20}
@@ -449,7 +563,9 @@ const Authentication = () => {
                   <TextInput
                     style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                     placeholder="5 chiffres"
-                    placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                    placeholderTextColor={
+                      isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                    }
                     value={matricule}
                     onChangeText={setMatricule}
                     keyboardType="number-pad"
@@ -461,8 +577,15 @@ const Authentication = () => {
 
               {action === "Sign up" && (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Email</Text>
-                  <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                  <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                    Email
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                    ]}
+                  >
                     <Feather
                       name="mail"
                       size={20}
@@ -472,7 +595,9 @@ const Authentication = () => {
                     <TextInput
                       style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                       placeholder="Votre email professionnel"
-                      placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                      placeholderTextColor={
+                        isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                      }
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
@@ -484,8 +609,15 @@ const Authentication = () => {
               )}
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Mot de passe</Text>
-                <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                  Mot de passe
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                  ]}
+                >
                   <Feather
                     name="lock"
                     size={20}
@@ -495,7 +627,9 @@ const Authentication = () => {
                   <TextInput
                     style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                     placeholder="Votre mot de passe"
-                    placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                    placeholderTextColor={
+                      isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                    }
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
@@ -509,7 +643,12 @@ const Authentication = () => {
                   <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
                     Confirmer le mot de passe
                   </Text>
-                  <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                    ]}
+                  >
                     <Feather
                       name="lock"
                       size={20}
@@ -519,7 +658,9 @@ const Authentication = () => {
                     <TextInput
                       style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                       placeholder="Confirmez votre mot de passe"
-                      placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                      placeholderTextColor={
+                        isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                      }
                       value={confirmPassword}
                       onChangeText={setConfirmPassword}
                       secureTextEntry
@@ -529,22 +670,6 @@ const Authentication = () => {
                 </View>
               )}
 
-              {/* Add this block of code before the Submit Button in the return statement (around line 350) */}
-              {isBlocked && (
-                <View style={styles.blockedMessage}>
-                  <Feather name="lock" size={24} color="#F44336" style={styles.blockedIcon} />
-                  <Text style={styles.blockedText}>
-                    Compte bloqué après 5 tentatives échouées.
-                    {blockExpiration && (
-                      <Text>
-                        {"\n"}Réessayez dans {Math.ceil((blockExpiration - Date.now()) / 60000)} minutes.
-                      </Text>
-                    )}
-                  </Text>
-                </View>
-              )}
-
-              {/* Submit Button - matches web version */}
               <TouchableOpacity
                 style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                 onPress={action === "Login" ? handleLogin : handleSignUp}
@@ -558,7 +683,7 @@ const Authentication = () => {
                   style={styles.submitButtonGradient}
                 >
                   {loading ? (
-                    <View style={styles.loadingSpinner} />
+                    <ActivityIndicator color="white" />
                   ) : (
                     <View style={styles.submitButtonContent}>
                       <Feather
@@ -567,16 +692,22 @@ const Authentication = () => {
                         color="white"
                         style={styles.submitButtonIcon}
                       />
-                      <Text style={styles.submitButtonText}>{action === "Login" ? "Se connecter" : "S'inscrire"}</Text>
+                      <Text style={styles.submitButtonText}>
+                        {action === "Login" ? "Se connecter" : "S'inscrire"}
+                      </Text>
                     </View>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
 
-            {/* Footer */}
             <View style={styles.footer}>
-              <Text style={[styles.footerText, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
+              <Text
+                style={[
+                  styles.footerText,
+                  isDark ? styles.textLightSecondary : styles.textDarkSecondary,
+                ]}
+              >
                 {action === "Login" ? "Portail RH" : ""}
               </Text>
             </View>
@@ -586,11 +717,10 @@ const Authentication = () => {
 
       <Toast />
     </SafeAreaView>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
-  // Background styles - matches web version
   backgroundContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
@@ -598,40 +728,6 @@ const styles = StyleSheet.create({
   backgroundGradient: {
     ...StyleSheet.absoluteFillObject,
   },
-  blob: {
-    position: "absolute",
-    width: 600,
-    height: 600,
-    borderRadius: 300,
-  },
-  topRightBlob: {
-    top: -200,
-    right: -200,
-  },
-  centerBlob: {
-    top: "40%",
-    right: "35%",
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-  },
-  bottomLeftBlob: {
-    bottom: -200,
-    left: -200,
-  },
-  mouseEffect: {
-    position: "absolute",
-    width: 800,
-    height: 800,
-    borderRadius: 400,
-  },
-  mouseEffectGradient: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 400,
-  },
-
-  // Main container styles
   safeArea: {
     flex: 1,
   },
@@ -649,8 +745,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 20,
   },
-
-  // Theme toggle - matches web version
   themeToggle: {
     position: "absolute",
     top: 20,
@@ -668,41 +762,27 @@ const styles = StyleSheet.create({
   themeToggleDark: {
     backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-
-  // Branding - matches web version
   branding: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 30,
   },
-  brandingIcon: {
-    marginRight: 10,
-    // Add shadow to match web version
-    textShadowColor: "rgba(56, 189, 248, 0.5)",
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
-  },
   logo: {
-    width: 200, // Adjust the width
-    height: 50, // Adjust the height
+    width: 200,
+    height: 50,
   },
   gradientText: {
-    // Note: React Native doesn't support text gradients directly
-    // This is a visual approximation
     textShadowColor: "rgba(56, 189, 248, 0.5)",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 3,
   },
-
-  // Auth card
   authCard: {
     borderRadius: 16,
     padding: 24,
     width: "100%",
     maxWidth: 400,
     alignSelf: "center",
-    //elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -717,8 +797,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderColor: "rgba(255, 255, 255, 0.18)",
   },
-
-  // Header
   header: {
     marginBottom: 24,
   },
@@ -739,8 +817,6 @@ const styles = StyleSheet.create({
     color: "#384bf8",
     fontWeight: "500",
   },
-
-  // Form
   formContainer: {
     marginBottom: 16,
   },
@@ -780,8 +856,6 @@ const styles = StyleSheet.create({
   inputDark: {
     color: "white",
   },
-
-  // Submit button
   submitButton: {
     height: 48,
     borderRadius: 8,
@@ -810,20 +884,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
   },
-  loadingSpinner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-    borderTopColor: "white",
-    transform: [{ rotate: "360deg" }],
-    animationDuration: "1s",
-    animationIterationCount: "infinite",
-    animationTimingFunction: "linear",
-  },
-
-  // Footer
   footer: {
     alignItems: "center",
     marginTop: 16,
@@ -831,8 +891,6 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 14,
   },
-
-  // Text colors - matches web version
   textLight: {
     color: "white",
   },
@@ -845,7 +903,6 @@ const styles = StyleSheet.create({
   textDarkSecondary: {
     color: "rgba(26, 31, 56, 0.7)",
   },
-  // Add these styles to the StyleSheet (at the end of the styles object)
   blockedMessage: {
     backgroundColor: "rgba(244, 67, 54, 0.1)",
     borderRadius: 8,
@@ -862,6 +919,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: "500",
   },
-})
+});
 
-export default Authentication
+export default Authentication;
