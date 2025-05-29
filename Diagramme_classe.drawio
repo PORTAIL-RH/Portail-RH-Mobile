@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36" version="27.1.1">
   <diagram id="C5RBs43oDa-KdzZeNtuy" name="Page-1">
-    <mxGraphModel dx="2253" dy="1946" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="2505" dy="2083" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="WIyWlLk6GJQsqaUBKTNV-0" />
         <mxCell id="WIyWlLk6GJQsqaUBKTNV-1" parent="WIyWlLk6GJQsqaUBKTNV-0" />
@@ -170,7 +170,7 @@
         <mxCell id="O5EITzwN7BPap431oK7U-131" value="+Postuler()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="O5EITzwN7BPap431oK7U-128" vertex="1">
           <mxGeometry y="208" width="200" height="26" as="geometry" />
         </mxCell>
-        <mxCell id="-u3w1DlrnEDcpq63W45w-38" value="+RecevoirNotiticationEmal()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="O5EITzwN7BPap431oK7U-128" vertex="1">
+        <mxCell id="-u3w1DlrnEDcpq63W45w-38" value="+RecevoirNotiticationEmail()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="O5EITzwN7BPap431oK7U-128" vertex="1">
           <mxGeometry y="234" width="200" height="30" as="geometry" />
         </mxCell>
         <mxCell id="O5EITzwN7BPap431oK7U-144" value="" style="endArrow=block;endSize=10;endFill=0;shadow=0;strokeWidth=1;rounded=0;curved=0;edgeStyle=elbowEdgeStyle;elbow=vertical;entryX=0.487;entryY=1.029;entryDx=0;entryDy=0;entryPerimeter=0;" parent="WIyWlLk6GJQsqaUBKTNV-1" edge="1" target="-u3w1DlrnEDcpq63W45w-168">
@@ -228,7 +228,7 @@
           <mxGeometry y="234" width="180" height="28" as="geometry" />
         </mxCell>
         <mxCell id="-u3w1DlrnEDcpq63W45w-183" value="Offre" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" parent="WIyWlLk6GJQsqaUBKTNV-1" vertex="1">
-          <mxGeometry x="-291" y="360" width="180" height="250" as="geometry">
+          <mxGeometry x="-291" y="360" width="180" height="224" as="geometry">
             <mxRectangle x="-330" y="546" width="140" height="30" as="alternateBounds" />
           </mxGeometry>
         </mxCell>
@@ -240,9 +240,6 @@
         </mxCell>
         <mxCell id="-u3w1DlrnEDcpq63W45w-200" value="+AjouCandidature()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="-u3w1DlrnEDcpq63W45w-183" vertex="1">
           <mxGeometry y="198" width="180" height="26" as="geometry" />
-        </mxCell>
-        <mxCell id="-u3w1DlrnEDcpq63W45w-201" value="+RecevoirNotiticationEmal()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="-u3w1DlrnEDcpq63W45w-183" vertex="1">
-          <mxGeometry y="224" width="180" height="26" as="geometry" />
         </mxCell>
         <mxCell id="gfEL7aQkDBIa4sKmxt_5-2" value="" style="endArrow=diamondThin;endFill=1;endSize=24;html=1;rounded=0;exitX=0.434;exitY=1.003;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.831;entryY=0.028;entryDx=0;entryDy=0;entryPerimeter=0;" parent="WIyWlLk6GJQsqaUBKTNV-1" source="gfEL7aQkDBIa4sKmxt_5-29" target="O5EITzwN7BPap431oK7U-124" edge="1">
           <mxGeometry width="160" relative="1" as="geometry">
