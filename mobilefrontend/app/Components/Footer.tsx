@@ -1,4 +1,10 @@
-import { Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native"
+import {
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  View,
+} from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { LinearGradient } from "expo-linear-gradient"
@@ -23,14 +29,11 @@ const Footer = () => {
   const route = useRoute()
   const [isDarkMode, setIsDarkMode] = useState(false)
 
-  // Get current route name
   const currentRoute = route.name
 
-  // Load theme preference and set up polling for changes
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        // Use the standard 'theme' key instead of '@theme_mode'
         const storedTheme = await AsyncStorage.getItem("theme")
         const newIsDarkMode = storedTheme === "dark"
         if (isDarkMode !== newIsDarkMode) {
@@ -42,77 +45,47 @@ const Footer = () => {
       }
     }
 
-    // Load theme immediately
     loadTheme()
-
-    // Set up polling to check for theme changes every 500ms
     const themeCheckInterval = setInterval(loadTheme, 500)
-
-    return () => {
-      clearInterval(themeCheckInterval)
-    }
+    return () => clearInterval(themeCheckInterval)
   }, [isDarkMode])
 
-  // Navigation items
   const navigationItems = [
-    {
-      name: "AccueilCollaborateur",
-      label: "Accueil",
-      icon: "home",
-    },
-    {
-      name: "Demandestot",
-      label: "Demandes",
-      icon: "file-text",
-    },
-    {
-      name: "AjouterDemande",
-      label: "Ajouter",
-      icon: "plus-circle",
-      special: true,
-    },
-    {
-      name: "Calendar",
-      label: "Calendar",
-      icon: "calendar",
-    },
-    {
-      name: "Profile",
-      label: "Profil",
-      icon: "user",
-    },
+    { name: "AccueilCollaborateur", label: "Accueil", icon: "home" },
+    { name: "Demandestot", label: "Demandes", icon: "file-text" },
+    { name: "AjouterDemande", label: "Ajouter", icon: "plus-circle", special: true },
+    { name: "Calendar", label: "Calendar", icon: "calendar" },
+    { name: "Profile", label: "Profil", icon: "user" },
   ]
 
   return (
-    <LinearGradient
-      colors={isDarkMode ? ["#1a1f38", "#2d3a65"] : ["#f0f4f8", "#e2eaf2"]}
-      start={{ x: 0.1, y: 0.1 }}
-      end={{ x: 0.9, y: 0.9 }}
-      style={styles.footer}
-    >
-      {navigationItems.map((item) => (
-        <TouchableOpacity
-          key={item.name}
-          style={[styles.navItem, item.special && styles.specialNavItem]}
-          onPress={() => navigation.navigate(item.name)}
-          activeOpacity={0.7}
-        >
-          {item.special ? (
-            <LinearGradient
-              colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.addButtonContainer}
+    <View style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}>
+      <LinearGradient
+        colors={isDarkMode ? ["#1a1f38", "#2d3a65"] : ["#f0f4f8", "#e2eaf2"]}
+        start={{ x: 0.1, y: 0.1 }}
+        end={{ x: 0.9, y: 0.9 }}
+        style={styles.footer}
+      >
+        {navigationItems
+          .filter((item) => !item.special)
+          .map((item) => (
+            <TouchableOpacity
+              key={item.name}
+              style={styles.navItem}
+              onPress={() => navigation.navigate(item.name)}
+              activeOpacity={0.7}
             >
-              <Feather name={item.icon} size={24} color="#FFFFFF" />
-            </LinearGradient>
-          ) : (
-            <>
               <Feather
                 name={item.icon}
                 size={22}
                 color={
-                  currentRoute === item.name ? (isDarkMode ? "#B388FF" : "#0e135f") : isDarkMode ? "#AAAAAA" : "#757575"
+                  currentRoute === item.name
+                    ? isDarkMode
+                      ? "#B388FF"
+                      : "#0e135f"
+                    : isDarkMode
+                    ? "#AAAAAA"
+                    : "#757575"
                 }
               />
               <Text
@@ -123,17 +96,32 @@ const Footer = () => {
                       ? styles.activeNavLabelDark
                       : styles.activeNavLabelLight
                     : isDarkMode
-                      ? styles.textLight
-                      : styles.textDark,
+                    ? styles.textLight
+                    : styles.textDark,
                 ]}
               >
                 {item.label}
               </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      ))}
-    </LinearGradient>
+            </TouchableOpacity>
+          ))}
+      </LinearGradient>
+
+      {/* Floating + button */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("AjouterDemande")}
+        activeOpacity={0.8}
+        style={styles.floatingButton}
+      >
+        <LinearGradient
+          colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.addButtonContainer}
+        >
+          <Feather name="plus-circle" size={28} color="#FFFFFF" />
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
   )
 }
 
@@ -145,10 +133,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.1)",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     height: 60,
   },
   navItem: {
@@ -156,9 +140,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 4,
     width: width / 5,
-  },
-  specialNavItem: {
-    marginBottom: 20,
   },
   navLabel: {
     fontSize: 12,
@@ -173,9 +154,9 @@ const styles = StyleSheet.create({
     color: "#B388FF",
   },
   addButtonContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -190,7 +171,12 @@ const styles = StyleSheet.create({
   textDark: {
     color: "#757575",
   },
+  floatingButton: {
+    position: "absolute",
+    bottom: 25,
+    left: width / 2 - 28, // Center the button (half of 56px width)
+    zIndex: 10,
+  },
 })
 
 export default Footer
-

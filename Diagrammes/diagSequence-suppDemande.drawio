@@ -1,0 +1,154 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36" version="26.2.14">
+  <diagram name="Page-1" id="2YBvvXClWsGukQMizWep">
+    <mxGraphModel dx="1895" dy="1022" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="WhzZw__k2prLQtfs7mbh-1" value="Systeme" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
+          <mxGeometry x="480" y="188" width="100" height="852" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-2" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="WhzZw__k2prLQtfs7mbh-1">
+          <mxGeometry x="45" y="230" width="10" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-3" value="1 : Sélectionner une demande a Supprimer" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" target="WhzZw__k2prLQtfs7mbh-2">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="320" y="418" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="435" y="418" />
+            </Array>
+            <mxPoint x="520" y="418" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-4" value="Personnel" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="305" y="168" width="30" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-5" value="" style="endArrow=none;dashed=1;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="320" y="1041.3714425223213" as="sourcePoint" />
+            <mxPoint x="320" y="248" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-6" value="2: Clique sur boutton Supprimer" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="321" y="475" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="436" y="475" />
+            </Array>
+            <mxPoint x="526" y="475" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-9" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="525" y="475" width="10" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-11" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="525" y="548" width="10" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-12" value="3: Cliquer dur boutton&amp;nbsp;" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="320" y="548" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="435" y="548" />
+            </Array>
+            <mxPoint x="525" y="548" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-14" value="ref" style="shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;movable=0;resizable=0;rotatable=0;deletable=0;editable=0;locked=1;connectable=0;" vertex="1" parent="1">
+          <mxGeometry x="255" y="275" width="685" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-15" value="S&#39;authentifier" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;movable=0;rotatable=0;deletable=0;editable=0;locked=1;connectable=0;" vertex="1" parent="1">
+          <mxGeometry x="372" y="280" width="90" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-16" value="&lt;font style=&quot;font-size: 10px;&quot;&gt;Modifier demandes&lt;/font&gt;" style="shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="170" y="120" width="880" height="950" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-17" value="Controlleur" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
+          <mxGeometry x="640" y="190" width="100" height="850" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-18" value="Base de données" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
+          <mxGeometry x="800" y="190" width="100" height="850" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-19" value="ref" style="shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;" vertex="1" parent="1">
+          <mxGeometry x="256" y="334" width="685" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-20" value="Consulter Demandes" style="text;html=1;align=center;verticalAlign=middle;resizable=1;points=[];autosize=1;strokeColor=none;fillColor=none;movable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;" vertex="1" parent="1">
+          <mxGeometry x="348" y="339" width="140" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-21" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="234" y="600" width="727" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-22" value="[Button = annuler]" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="260" y="646" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-23" value="" style="endArrow=classic;html=1;rounded=0;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="529.5000000000002" y="692" as="sourcePoint" />
+            <mxPoint x="320" y="692" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-24" value="4: Suppresion annulée" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="352" y="686" width="140" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-25" value="[Button = Supprimer]" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="245" y="750" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-26" value="" style="endArrow=none;dashed=1;html=1;rounded=0;entryX=1.005;entryY=0.418;entryDx=0;entryDy=0;entryPerimeter=0;dashPattern=8 8;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="230" y="721" as="sourcePoint" />
+            <mxPoint x="964.6349999999998" y="721.3800000000001" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-27" value="" style="endArrow=classic;html=1;rounded=0;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="529.5000000000002" y="921" as="sourcePoint" />
+            <mxPoint x="320" y="921" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-28" value="11: Demande supprime avec succès" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="311" y="921" width="220" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-29" value="6: Supprimer demande" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="690" y="828" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="757" y="828" />
+            </Array>
+            <mxPoint x="847" y="828" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-30" value="7: Confirmer la Suppression" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="684" y="844" width="170" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-31" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="846" y="828" width="10" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-32" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=0;dashed=1;" edge="1" parent="1" source="WhzZw__k2prLQtfs7mbh-31" target="WhzZw__k2prLQtfs7mbh-17">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="660" y="937" as="sourcePoint" />
+            <mxPoint x="689.590909090909" y="937" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-33" value="5:Confirmer Suppression" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="530" y="777" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="597" y="777" />
+            </Array>
+            <mxPoint x="687" y="777" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-34" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="686" y="777" width="10" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-35" value="8: message de confirmation" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="528" y="868" width="170" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="WhzZw__k2prLQtfs7mbh-36" value="" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=0;dashed=1;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="688" y="893" as="sourcePoint" />
+            <mxPoint x="531.590909090909" y="893" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

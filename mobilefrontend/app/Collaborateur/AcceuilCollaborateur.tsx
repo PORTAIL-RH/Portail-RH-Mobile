@@ -34,6 +34,7 @@ export type RootStackParamList = {
   AjouterDemande: undefined
   Calendar: undefined
   Statistics: undefined
+  Documents: undefined
 }
 
 // Définir le type de navigation
@@ -428,7 +429,12 @@ const AccueilCollaborateur = () => {
 
       <BackgroundGradient isDarkMode={isDarkMode} />
 
-      <Navbar isDarkMode={isDarkMode} toggleTheme={toggleTheme} handleLogout={handleLogout} />
+      <Navbar 
+        isDarkMode={isDarkMode} 
+        toggleTheme={toggleTheme} 
+        handleLogout={handleLogout}
+        showBackButton={false}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -584,7 +590,35 @@ const AccueilCollaborateur = () => {
                   <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
                 </TouchableOpacity>
 
-                
+                {/* Mes documents */}
+                <TouchableOpacity
+                  style={[styles.actionCard, isDarkMode ? styles.cardDark : styles.cardLight]}
+                  onPress={() => navigation.navigate("Documents")}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionIconGradient}
+                  >
+                    <Feather name="folder" size={24} color="#fff" />
+                  </LinearGradient>
+                  <View style={styles.actionCardContent}>
+                    <Text style={[styles.actionCardTitle, isDarkMode ? styles.textLight : styles.textDark]}>
+                      Mes documents
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionCardSubtitle,
+                        isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                      ]}
+                    >
+                      Gérer mes fichiers
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+                </TouchableOpacity>
               </View>
             </View>
 

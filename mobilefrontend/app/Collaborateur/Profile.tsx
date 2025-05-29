@@ -11,6 +11,11 @@ import {
   ActivityIndicator,
   Dimensions,
   RefreshControl,
+  Modal,
+  TextInput,
+  Alert,
+  ViewStyle,
+  TextStyle,
 } from "react-native"
 import { useNavigation, type NavigationProp } from "@react-navigation/native"
 import AsyncStorage from "@react-native-async-storage/async-storage"
@@ -30,9 +35,13 @@ import {
   IdCard,
   Heart,
   Users,
+  Lock,
+  X,
 } from "lucide-react-native"
 import Navbar from "../Components/NavBar"
 import Footer from "../Components/Footer"
+import { API_CONFIG } from "../config/apiConfig"
+import Toast from "react-native-toast-message"
 
 type RootStackParamList = {
   AccueilCollaborateur: undefined
@@ -41,6 +50,7 @@ type RootStackParamList = {
   Notifications: undefined
   EditProfile: undefined
   Demandestot: undefined
+  Documents: undefined
 }
 
 const { width } = Dimensions.get("window")
@@ -81,6 +91,236 @@ interface UserProfileData {
   active: boolean
 }
 
+interface ChangePasswordModalProps {
+  visible: boolean
+  onClose: () => void
+  isDarkMode: boolean
+  themeStyles: any
+}
+
+type StylesType = {
+  container: ViewStyle;
+  header: ViewStyle;
+  headerLeft: ViewStyle;
+  backButton: ViewStyle;
+  headerTitle: TextStyle;
+  headerRight: ViewStyle;
+  iconButton: ViewStyle;
+  scrollView: ViewStyle;
+  scrollContent: ViewStyle;
+  loadingContainer: ViewStyle;
+  loadingText: TextStyle;
+  profileHeader: ViewStyle;
+  profileImageContainer: ViewStyle;
+  profileImage: ViewStyle;
+  editButton: ViewStyle;
+  profileName: TextStyle;
+  profileRole: TextStyle;
+  badgeContainer: ViewStyle;
+  badge: ViewStyle;
+  badgeText: TextStyle;
+  tabsContainer: ViewStyle;
+  tab: ViewStyle;
+  activeTab: ViewStyle;
+  tabText: TextStyle;
+  activeTabText: TextStyle;
+  section: ViewStyle;
+  sectionTitle: TextStyle;
+  infoGrid: ViewStyle;
+  infoItem: ViewStyle;
+  infoIconContainer: ViewStyle;
+  infoContent: ViewStyle;
+  infoLabel: TextStyle;
+  infoValue: TextStyle;
+  skillsTitle: TextStyle;
+  skillsContainer: ViewStyle;
+  skillBadge: ViewStyle;
+  skillText: TextStyle;
+  actionsList: ViewStyle;
+  actionButton: ViewStyle;
+  actionButtonContent: ViewStyle;
+  actionButtonText: TextStyle;
+  modalOverlay: ViewStyle;
+  modalContent: ViewStyle;
+  modalHeader: ViewStyle;
+  modalTitle: TextStyle;
+  modalBody: ViewStyle;
+  inputContainer: ViewStyle;
+  inputLabel: TextStyle;
+  input: ViewStyle & TextStyle;
+  changePasswordButton: ViewStyle;
+  changePasswordButtonText: TextStyle;
+}
+
+const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ visible, onClose, isDarkMode, themeStyles }) => {
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+
+const handleChangePassword = async () => {
+  try {
+    setLoading(true)
+
+    // Validate inputs
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Tous les champs sont requis",
+      })
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Les nouveaux mots de passe ne correspondent pas",
+      })
+      return
+    }
+
+    // Get user ID and token
+    const userInfo = await AsyncStorage.getItem("userInfo")
+    const token = await AsyncStorage.getItem("userToken")
+    
+    if (!userInfo || !token) {
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Session expirée, veuillez vous reconnecter",
+      })
+      return
+    }
+
+    const { id: userId } = JSON.parse(userInfo)
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/change-password/${userId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword,
+        confirmPassword
+      }),
+    })
+
+    // Handle both JSON and text responses
+    let responseData
+    const contentType = response.headers.get("content-type")
+    if (contentType && contentType.includes("application/json")) {
+      responseData = await response.json()
+    } else {
+      responseData = { message: await response.text() }
+    }
+
+    if (!response.ok) {
+      // Extract error message from different response formats
+      const errorMessage = responseData.error || 
+                         responseData.message || 
+                         (typeof responseData === 'string' ? responseData : "Échec de la modification du mot de passe")
+      throw new Error(errorMessage)
+    }
+
+    Toast.show({
+      type: "success",
+      text1: "Succès",
+      text2: responseData.message || "Mot de passe modifié avec succès",
+    })
+
+    // Reset form and close modal
+    setCurrentPassword("")
+    setNewPassword("")
+    setConfirmPassword("")
+    onClose()
+
+  } catch (error) {
+    console.error("Password change error:", error)
+    Toast.show({
+      type: "error",
+      text1: "Erreur",
+      text2: error instanceof Error ? error.message : "Une erreur inconnue est survenue",
+    })
+  } finally {
+    setLoading(false)
+  }
+}
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, themeStyles.card]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, themeStyles.text]}>Changer le mot de passe</Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalBody}>
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, themeStyles.subtleText]}>Mot de passe actuel</Text>
+              <TextInput
+                style={[styles.input, themeStyles.input]}
+                secureTextEntry
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholder="Entrez votre mot de passe actuel"
+                placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, themeStyles.subtleText]}>Nouveau mot de passe</Text>
+              <TextInput
+                style={[styles.input, themeStyles.input]}
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholder="Entrez votre nouveau mot de passe"
+                placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, themeStyles.subtleText]}>Confirmer le nouveau mot de passe</Text>
+              <TextInput
+                style={[styles.input, themeStyles.input]}
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Confirmez votre nouveau mot de passe"
+                placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.changePasswordButton, { opacity: loading ? 0.7 : 1 }]}
+              onPress={handleChangePassword}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.changePasswordButtonText}>Changer le mot de passe</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
 const ProfilePage = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>()
   const colorScheme = useColorScheme()
@@ -90,6 +330,7 @@ const ProfilePage = () => {
   const [userInfo, setUserInfo] = useState<UserProfileData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -174,6 +415,24 @@ const ProfilePage = () => {
     } finally {
       setRefreshing(false)
     }
+  }, [])
+
+  // Load theme preference from AsyncStorage
+  useEffect(() => {
+    const loadThemePreference = async () => {
+      try {
+        const storedTheme = await AsyncStorage.getItem("theme")
+        if (storedTheme !== null) {
+          setIsDarkMode(storedTheme === "dark")
+        }
+        setLoading(false)
+      } catch (error) {
+        console.error("Error loading theme preference:", error)
+        setLoading(false)
+      }
+    }
+
+    loadThemePreference()
   }, [])
 
   const toggleTheme = async () => {
@@ -443,20 +702,32 @@ const ProfilePage = () => {
               <ActionButton
                 icon={<FileText size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
                 title="Mes documents"
-                onPress={() => {}}
+                onPress={() => navigation.navigate('Documents')}
               />
-
+              
+              <ActionButton
+                icon={<Lock size={20} color={isDarkMode ? "#B8B8BF" : "#0e135f"} />}
+                title="Changer le mot de passe"
+                onPress={() => setShowChangePasswordModal(true)}
+              />
             </View>
           </View>
         )}
       </ScrollView>
 
       <Footer />
+
+      <ChangePasswordModal
+        visible={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+        isDarkMode={isDarkMode}
+        themeStyles={themeStyles}
+      />
     </SafeAreaView>
   )
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<StylesType>({
   container: {
     flex: 1,
   },
@@ -666,6 +937,56 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginLeft: 12,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "90%",
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  modalBody: {
+    gap: 16,
+  },
+  inputContainer: {
+    gap: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+  },
+  input: {
+    height: 44,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+  },
+  changePasswordButton: {
+    backgroundColor: "#0e135f",
+    height: 44,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  changePasswordButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 })
 
 const lightStyles = StyleSheet.create({
@@ -731,6 +1052,12 @@ const lightStyles = StyleSheet.create({
   skillText: {
     color: "#0e135f",
   },
+  input: {
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#EEEEEE",
+    color: "#1a1f38",
+  },
 })
 
 const darkStyles = StyleSheet.create({
@@ -789,6 +1116,12 @@ const darkStyles = StyleSheet.create({
   },
   skillText: {
     color: "#B388FF",
+  },
+  input: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "#1a1f38",
+    color: "#FFFFFF",
   },
 })
 

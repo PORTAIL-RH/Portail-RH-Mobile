@@ -1,5 +1,5 @@
 import React from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal } from "react-native"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform } from "react-native"
 import {
   Search,
   Filter,
@@ -14,32 +14,7 @@ import {
   Clock,
   XCircle,
 } from "lucide-react-native"
-
-// Define the Request interface
-interface Request {
-  id: string
-  type: string
-  description: string
-  status: "pending" | "approved" | "rejected"
-  date: string
-  time: string
-  details: any
-}
-
-interface DemandesListProps {
-  filteredRequests: Request[]
-  onSelectRequest: (request: Request) => void
-  isDarkMode: boolean
-  themeStyles: any
-  searchQuery: string
-  setSearchQuery: React.Dispatch<React.SetStateAction<string>>
-  activeFilter: string
-  setActiveFilter: React.Dispatch<React.SetStateAction<string>>
-  activeTypeFilter: string
-  setActiveTypeFilter: React.Dispatch<React.SetStateAction<string>>
-  filterRequests: (status: string, type?: string) => void
-  searchRequests: (text: string) => void
-}
+import type { Request, DemandesListProps } from "./Demandes"
 
 const DemandesList: React.FC<DemandesListProps> = ({
   filteredRequests,
@@ -54,6 +29,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
   setActiveTypeFilter,
   filterRequests,
   searchRequests,
+  loading = false,
 }) => {
   const [showFilterModal, setShowFilterModal] = React.useState(false)
 
@@ -77,7 +53,44 @@ const DemandesList: React.FC<DemandesListProps> = ({
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  const getRequestStatus = (request: Request): "approved" | "rejected" | "pending" => {
+    // Check if it's a document or pre-avance request
+    if (request.type.toLowerCase().includes("document") || request.type.toLowerCase().includes("pre-avance")) {
+      // If responseRh is undefined or null, set dateDemande to "N/A"
+      if (request.responseRh === undefined || request.responseRh === null) {
+        if (request.details) {
+          request.details.dateDemande = "N/A";
+        }
+        return "pending";
+      }
+      
+      switch (request.responseRh) {
+        case "T":
+          return "approved"
+        case "N":
+          return "rejected"
+        case "I":
+        default:
+          return "pending"
+      }
+    }
+    
+    // For other request types, use responseChefs
+    if (!request.responseChefs) return "pending";
+    
+    switch (request.responseChefs.responseChef1) {
+      case "O":
+        return "approved"
+      case "N":
+        return "rejected"
+      case "I":
+      default:
+        return "pending"
+    }
+  }
+
+  const getStatusIcon = (request: Request) => {
+    const status = getRequestStatus(request);
     switch (status) {
       case "approved":
         return <CheckCircle size={18} color="#4CAF50" />
@@ -90,7 +103,8 @@ const DemandesList: React.FC<DemandesListProps> = ({
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (request: Request) => {
+    const status = getRequestStatus(request);
     switch (status) {
       case "approved":
         return "#4CAF50"
@@ -103,7 +117,8 @@ const DemandesList: React.FC<DemandesListProps> = ({
     }
   }
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (request: Request) => {
+    const status = getRequestStatus(request);
     switch (status) {
       case "approved":
         return "Approuvée"
@@ -116,19 +131,159 @@ const DemandesList: React.FC<DemandesListProps> = ({
     }
   }
 
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString || dateString === "N/A") return ""
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return dateString
+      return date.toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    } catch (error) {
+      console.error("Error formatting date:", error)
+      return dateString
+    }
+  }
+
+  const formatTime = (dateString: string | undefined) => {
+    if (!dateString || dateString === "N/A") return ""
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return ""
+      return date.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch (error) {
+      console.error("Error formatting time:", error)
+      return ""
+    }
+  }
+
+  const renderRequestItem = ({ item }: { item: Request }) => {
+    const getRequestTypeIcon = (type: string) => {
+      const lowerCaseType = type.toLowerCase()
+      if (lowerCaseType.includes("congé")) {
+        return <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+      } else if (lowerCaseType.includes("formation")) {
+        return <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
+      } else if (lowerCaseType.includes("document")) {
+        return <FileText size={24} color={isDarkMode ? "#607D8B" : "#607D8B"} />
+      } else if (lowerCaseType.includes("pre-avance")) {
+        return <DollarSign size={24} color={isDarkMode ? "#FF9800" : "#FF9800"} />
+      } else if (lowerCaseType.includes("autorisation")) {
+        return <Shield size={24} color={isDarkMode ? "#673AB7" : "#673AB7"} />
+      } else {
+        return <FileText size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
+      }
+    }
+
+    const getStatusIcon = (status: string) => {
+      switch (status) {
+        case "approved":
+          return <CheckCircle size={18} color="#4CAF50" />
+        case "rejected":
+          return <XCircle size={18} color="#F44336" />
+        case "pending":
+          return <Clock size={18} color="#FFC107" />
+        default:
+          return null
+      }
+    }
+
+    const getStatusColor = (status: string) => {
+      switch (status) {
+        case "approved":
+          return "#4CAF50"
+        case "rejected":
+          return "#F44336"
+        case "pending":
+          return "#FFC107"
+        default:
+          return "#9370DB"
+      }
+    }
+
+    const getStatusText = (status: string) => {
+      switch (status) {
+        case "approved":
+          return "Approuvée"
+        case "rejected":
+          return "Rejetée"
+        case "pending":
+          return "En attente"
+        default:
+          return ""
+      }
+    }
+
+    return (
+      <TouchableOpacity style={[styles.requestItem, themeStyles.card]} onPress={() => onSelectRequest(item)}>
+        <View style={styles.requestItemLeft}>
+          {getRequestTypeIcon(item.type)}
+          <View style={styles.requestInfo}>
+            <Text style={[styles.requestType, themeStyles.text]} numberOfLines={1}>
+              {item.type}
+            </Text>
+            <Text style={[styles.requestDescription, themeStyles.subtleText]} numberOfLines={2}>
+              {item.description}
+            </Text>
+            <Text style={[styles.requestDate, themeStyles.subtleText]}>
+              {item.details.dateDemande === "N/A" ? "Date non disponible" : `Soumise le ${formatDate(item.details.dateDemande)}${formatTime(item.details.dateDemande) ? ` à ${formatTime(item.details.dateDemande)}` : ""}`}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.requestItemRight}>
+          <View
+            style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}20` }]}
+          >
+            {getStatusIcon(item.status)}
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {getStatusText(item.status)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    )
+  }
+
+  // Add sorting function
+  const sortByDateDemande = (requests: Request[]) => {
+    return [...requests].sort((a, b) => {
+      const dateA = a.details.dateDemande ? new Date(a.details.dateDemande).getTime() : 0;
+      const dateB = b.details.dateDemande ? new Date(b.details.dateDemande).getTime() : 0;
+      return dateB - dateA; // Sort in descending order (newest first)
+    });
+  };
+
   return (
-    <>
-      {/* Barre de recherche et filtre */}
+    <View style={styles.container}>
+      {/* Search and filter section */}
       <View style={[styles.searchContainer, themeStyles.searchContainer]}>
         <View style={[styles.searchInputContainer, themeStyles.searchInputContainer]}>
-          <Search size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} style={styles.searchIcon} />
+          <Search size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
           <TextInput
             style={[styles.searchInput, themeStyles.searchInput]}
             placeholder="Rechercher une demande..."
             placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
             value={searchQuery}
-            onChangeText={searchRequests}
+            onChangeText={(text) => {
+              setSearchQuery(text)
+              searchRequests(text)
+            }}
           />
+          {searchQuery !== "" && (
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery("")
+                searchRequests("")
+              }}
+            >
+              <X size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
+            </TouchableOpacity>
+          )}
         </View>
         <TouchableOpacity
           style={[styles.filterButton, themeStyles.filterButton]}
@@ -138,59 +293,78 @@ const DemandesList: React.FC<DemandesListProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Liste des demandes */}
+      {/* Filter chips */}
       <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.filtersScrollView, themeStyles.filtersScrollView]}
+        contentContainerStyle={styles.filtersContent}
       >
-        {filteredRequests.length === 0 ? (
-          <View style={[styles.emptyContainer, themeStyles.card]}>
-            <FileText size={48} color={isDarkMode ? "#555" : "#ccc"} />
-            <Text style={[styles.emptyText, themeStyles.text]}>Aucune demande trouvée</Text>
-            <Text style={[styles.emptySubtext, themeStyles.subtleText]}>
-              Aucune demande ne correspond à vos critères de recherche
-            </Text>
-          </View>
-        ) : (
-          filteredRequests.map((request) => (
+        {/* ... existing filter chips ... */}
+      </ScrollView>
+
+      {/* Requests list */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={isDarkMode ? "#9370DB" : "#9370DB"} />
+          <Text style={[styles.loadingText, themeStyles.text]}>Chargement...</Text>
+        </View>
+      ) : filteredRequests.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, themeStyles.text]}>Aucune demande trouvée</Text>
+        </View>
+      ) : (
+        <ScrollView 
+          style={styles.requestsList}
+          contentContainerStyle={styles.requestsListContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {filteredRequests.map((request) => (
             <TouchableOpacity
               key={request.id}
               style={[styles.requestCard, themeStyles.card]}
               onPress={() => onSelectRequest(request)}
-              activeOpacity={0.7}
             >
-              <View style={styles.requestCardHeader}>
+              <View style={styles.requestCardContent}>
                 <View style={styles.requestTypeContainer}>
                   {getRequestTypeIcon(request.type)}
-                  <View style={styles.requestTypeTextContainer}>
-                    <Text style={[styles.requestType, themeStyles.text]}>{request.type}</Text>
-                    <View style={styles.requestStatusContainer}>
-                      {getStatusIcon(request.status)}
-                      <Text style={[styles.requestStatusText, { color: getStatusColor(request.status) }]}>
-                        {getStatusText(request.status)}
-                      </Text>
-                    </View>
+                  <View style={styles.requestInfo}>
+                    <Text style={[styles.requestType, themeStyles.text]} numberOfLines={1}>
+                      {request.type}
+                    </Text>
+                    <Text style={[styles.requestDescription, themeStyles.subtleText]} numberOfLines={2}>
+                      {request.description}
+                    </Text>
+                    <Text style={[styles.requestDate, themeStyles.subtleText]}>
+                      {request.details.dateDemande === "N/A" 
+                        ? "Date non disponible" 
+                        : `Soumise le ${formatDate(request.details.dateDemande)}${
+                            request.time ? ` à ${request.time}` : ""
+                          }`}
+                    </Text>
                   </View>
                 </View>
-                <ChevronRight size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+                <View style={styles.statusContainer}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: `${getStatusColor(request)}20` },
+                    ]}
+                  >
+                    {getStatusIcon(request)}
+                    <Text style={[styles.statusText, { color: getStatusColor(request) }]}>
+                      {getStatusText(request)}
+                    </Text>
+                  </View>
+                  <ChevronRight size={20} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+                </View>
               </View>
-
-              <Text style={[styles.requestDescription, themeStyles.subtleText]}>{request.description}</Text>
-
-              <View style={styles.requestFooter}>
-                <Text style={[styles.requestDate, themeStyles.subtleText]}>
-                  {request.date} • {request.time}
-                </Text>
-              </View>
-
-              <View style={[styles.requestStatusBar, { backgroundColor: getStatusColor(request.status) }]} />
             </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
 
-      {/* Modal de filtre */}
+      {/* Filter modal */}
       <Modal
         visible={showFilterModal}
         transparent={true}
@@ -443,122 +617,125 @@ const DemandesList: React.FC<DemandesListProps> = ({
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
   searchInputContainer: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 40,
-  },
-  searchIcon: {
-    marginRight: 8,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    height: 36,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    fontSize: 16,
+    height: 36,
+    fontSize: 17,
+    marginLeft: 8,
   },
   filterButton: {
-    marginLeft: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    position: 'absolute',
+    right: 16,
+    top: 8,
+    width: 36,
+    height: 36,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
+    borderRadius: 10,
   },
-  scrollContainer: {
+  requestsList: {
     flex: 1,
   },
-  scrollContent: {
+  requestsListContent: {
     padding: 16,
-    paddingBottom: 80,
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-    borderRadius: 16,
-    marginTop: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
   requestCard: {
-    borderRadius: 16,
-    marginBottom: 16,
-    padding: 16,
-    position: "relative",
-    overflow: "hidden",
+    borderRadius: 10,
+    marginBottom: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
-  requestCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
+  requestCardContent: {
+    padding: 16,
   },
   requestTypeContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    alignItems: "flex-start",
   },
-  requestTypeTextContainer: {
+  requestInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   requestType: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600",
     marginBottom: 4,
   },
-  requestStatusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  requestStatusText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
   requestDescription: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  requestFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    fontSize: 15,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   requestDate: {
-    fontSize: 12,
+    fontSize: 13,
   },
-  requestStatusBar: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 15,
   },
   modalOverlay: {
     flex: 1,
@@ -567,34 +744,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   filterModal: {
-    width: "80%",
-    borderRadius: 16,
+    width: "90%",
+    maxWidth: 400,
+    borderRadius: 14,
     padding: 20,
-    maxHeight: "100%",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   filterModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   filterModalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
   },
   filterSectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     marginBottom: 8,
+    marginTop: 16,
   },
   filterOption: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     marginBottom: 8,
-    paddingHorizontal: 12,
   },
   activeFilterOption: {
     backgroundColor: "rgba(147, 112, 219, 0.1)",
@@ -605,11 +796,62 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   filterOptionText: {
-    fontSize: 16,
-    marginLeft: 12,
+    fontSize: 15,
   },
   activeFilterOptionText: {
     fontWeight: "600",
+  },
+  filtersScrollView: {
+    maxHeight: 44,
+    marginBottom: 8,
+  },
+  filtersContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  chipContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  activeChip: {
+    backgroundColor: '#9370DB',
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  activeChipText: {
+    color: '#FFFFFF',
+  },
+  requestItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  requestItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  requestItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  filters: {
+    flexDirection: "row",
+    gap: 8,
   },
 })
 

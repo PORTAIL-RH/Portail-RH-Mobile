@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import {
   View,
   Text,
@@ -11,6 +11,10 @@ import {
   Dimensions,
   RefreshControl,
   Modal,
+  ViewStyle,
+  TextStyle,
+  Platform,
+  StatusBar,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -26,8 +30,12 @@ import {
   XCircle,
 } from "lucide-react-native"
 import Footer from "../Components/Footer"
+import LeaveDaysInfo  from "../Components/LeaveDaysInfo"
+
 import { API_CONFIG } from "../config/apiConfig"
 import useApiPooling from "../useApiPooling"
+
+
 
 type RootStackParamList = {
   AccueilCollaborateur: undefined
@@ -98,12 +106,7 @@ const CalendarPage = () => {
         throw new Error("Failed to fetch user information")
       }
 
-      const data = await response.json()
-      return {
-        nom: data.nom || "User",
-        prenom: data.prenom || "",
-        role: data.role || "Collaborateur",
-      }
+      return await response.json()
     },
     storageKey: "user_profile_data",
     poolingInterval: 300000,
@@ -126,46 +129,34 @@ const CalendarPage = () => {
         throw new Error("Authentication token not available")
       }
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}`, {
+      const leaveResponse = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}/approved`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
 
-      if (!response.ok) {
+      if (!leaveResponse.ok) {
         throw new Error("Failed to fetch leave requests")
       }
 
-      const conges = await response.json()
-      return mapEvents(conges, "congé")
+      const conges = await leaveResponse.json()
+
+      return conges.map((conge: any) => ({
+        id: conge.id || conge._id,
+        title: `Demande de congé`,
+        type: "congé",
+        startDate: new Date(conge.dateDebut),
+        endDate: new Date(conge.dateFin || conge.dateDebut),
+        status: "approved",
+        duration: conge.nbrJours ? `${conge.nbrJours} jour(s)` : "1 jour",
+        comment: conge.texteDemande || conge.description || "",
+      }))
     },
     storageKey: "user_calendar_events",
     poolingInterval: 60000,
     initialData: [],
     dependsOnAuth: true,
   })
-
-  const mapEvents = (data: any[], type: string): CalendarEvent[] => {
-    if (!Array.isArray(data)) return []
-
-    return data
-      .filter((item) => item.dateDebut && item.reponseChef === "O")
-      .map((item) => {
-        const startDate = new Date(item.dateDebut)
-        const endDate = item.dateFin ? new Date(item.dateFin) : startDate
-
-        return {
-          id: item.id_libre_demande || item.id,
-          title: `Demande de ${type}`,
-          type: type,
-          startDate: startDate,
-          endDate: endDate,
-          status: "approved",
-          duration: item.nbrJours ? `${item.nbrJours} jour(s)` : "1 jour",
-          comment: item.texteDemande || "",
-        }
-      })
-  }
 
   useEffect(() => {
     const loadThemePreference = async () => {
@@ -185,7 +176,6 @@ const CalendarPage = () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)
     try {
-      await AsyncStorage.setItem("theme", newTheme)
       await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
       console.error("Error saving theme preference:", error)
@@ -194,8 +184,11 @@ const CalendarPage = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await Promise.all([refreshUserData(true), refreshEvents(true)])
-    setRefreshing(false)
+    try {
+      await Promise.all([refreshUserData(true), refreshEvents(true)])
+    } finally {
+      setRefreshing(false)
+    }
   }, [refreshUserData, refreshEvents])
 
   const themeStyles = isDarkMode ? darkStyles : lightStyles
@@ -288,15 +281,40 @@ const CalendarPage = () => {
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
-      <View style={[styles.header, themeStyles.header]}>
+      <StatusBar
+        backgroundColor={isDarkMode ? '#1F2846' : '#FFFFFF'}
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={Platform.OS === 'android'}
+      />
+      <View style={[
+        styles.header, 
+        themeStyles.header,
+        Platform.OS === 'android' && styles.androidHeader
+      ]}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("AccueilCollaborateur")}>
+          <TouchableOpacity 
+            style={[
+              styles.backButton,
+              Platform.OS === 'android' && styles.androidBackButton
+            ]} 
+            onPress={() => navigation.navigate("AccueilCollaborateur")}
+          >
             <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, themeStyles.text]}>Calendrier des congés</Text>
+          <Text style={[
+            styles.headerTitle, 
+            themeStyles.text,
+            Platform.OS === 'android' && styles.androidHeaderTitle
+          ]}>Calendrier des congés</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconButton} onPress={toggleTheme}>
+          <TouchableOpacity 
+            style={[
+              styles.iconButton,
+              Platform.OS === 'android' && styles.androidIconButton
+            ]} 
+            onPress={toggleTheme}
+          >
             {isDarkMode ? <Sun size={22} color="#E0E0E0" /> : <Moon size={22} color="#333" />}
           </TouchableOpacity>
         </View>
@@ -321,10 +339,8 @@ const CalendarPage = () => {
                 {userData ? `${userData.prenom} ${userData.nom}` : "Calendrier"}
               </Text>
             </View>
-            <Text style={[styles.calendarSubtitle, themeStyles.text]}>Nombre total de jours congés par an :</Text>
-
+<LeaveDaysInfo />
             <Text style={[styles.calendarSubtitle, themeStyles.subtleText]}>Vos congés approuvés</Text>
-
           </View>
 
           <View style={[styles.monthNavigation, themeStyles.card]}>
@@ -530,7 +546,7 @@ const CalendarPage = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
+  } as ViewStyle,
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -538,29 +554,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    paddingTop: 40,
-  },
+    paddingTop: Platform.OS === 'ios' ? 40 : StatusBar.currentHeight || 0,
+  } as ViewStyle,
+  androidHeader: {
+    paddingTop: (StatusBar.currentHeight || 0) + 8,
+    elevation: 4,
+    height: Platform.OS === 'android' ? 56 + (StatusBar.currentHeight || 0) : 'auto',
+  } as ViewStyle,
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-  },
+  } as ViewStyle,
   backButton: {
     padding: 8,
     marginRight: 8,
-  },
+  } as ViewStyle,
+  androidBackButton: {
+    padding: 12,
+    marginLeft: -4,
+  } as ViewStyle,
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
-  },
+  } as TextStyle,
+  androidHeaderTitle: {
+    fontSize: 18,
+  } as TextStyle,
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-  },
+  } as ViewStyle,
   iconButton: {
     padding: 8,
     borderRadius: 20,
     marginLeft: 8,
-  },
+  } as ViewStyle,
+  androidIconButton: {
+    padding: 12,
+  } as ViewStyle,
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -819,22 +850,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-})
+} as const)
 
 const lightStyles = StyleSheet.create({
   container: {
     backgroundColor: "#F5F5F5",
-  },
+  } as ViewStyle,
   header: {
     backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
-  },
+    borderBottomColor: Platform.OS === 'android' ? 'transparent' : "#EEEEEE",
+  } as ViewStyle,
   text: {
     color: "#333333",
-  },
+  } as TextStyle,
   subtleText: {
     color: "#757575",
-  },
+  } as TextStyle,
   card: {
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",
@@ -842,28 +873,28 @@ const lightStyles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
-  },
+  } as ViewStyle,
 })
 
 const darkStyles = StyleSheet.create({
   container: {
     backgroundColor: "#1a1f38",
-  },
+  } as ViewStyle,
   header: {
     backgroundColor: "#1F2846",
-    borderBottomColor: "#1a1f38",
-  },
+    borderBottomColor: Platform.OS === 'android' ? 'transparent' : "#1a1f38",
+  } as ViewStyle,
   text: {
     color: "#E0E0E0",
-  },
+  } as TextStyle,
   subtleText: {
     color: "#AAAAAA",
-  },
+  } as TextStyle,
   card: {
     backgroundColor: "#1F2846",
     borderColor: "#1a1f38",
     borderWidth: 1,
-  },
+  } as ViewStyle,
 })
 
 export default CalendarPage

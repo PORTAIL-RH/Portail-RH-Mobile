@@ -1,6 +1,4 @@
-
-import type React from "react"
-import { useEffect, useState } from "react"
+import React, { useState, useEffect } from "react"
 import {
   View,
   Text,
@@ -12,15 +10,17 @@ import {
   Dimensions,
   Alert,
   Modal,
+  Platform,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { ArrowLeft, Bell, Moon, Sun } from "lucide-react-native"
 import Footer from "../../Components/Footer"
 import { API_CONFIG } from "../../config/apiConfig"
 import Toast from "react-native-toast-message"
 import useApiPooling from "../../useApiPooling"
+import NavBar from "../../Components/NavBar"
 
 // Import our components
 import DemandesList from "./DemandesList"
@@ -79,54 +79,88 @@ type DemandesNavigationProp = NativeStackNavigationProp<RootStackParamList>
 // Get both width and height from Dimensions
 const { width, height } = Dimensions.get("window")
 
-// Définir l'interface Request
-interface Request {
-  id: string
-  type: string
-  description: string
-  status: "pending" | "approved" | "rejected"
-  date: string
-  time: string
-  originalData: {
-    dateDebut?: string
-    dateFin?: string
-    snjTempDep?: string
-    snjTempRetour?: string
-  }
+// Export the interfaces for use in other components
+export interface FormationTitle {
+  id: string;
+  titre: string;
+}
+
+export interface FormationType {
+  id: string;
+  type: string;
+}
+
+export interface FormationTheme {
+  id: string;
+  theme: string;
+}
+
+export interface Request {
+  id: string;
+  type: string;
+  description: string;
+  status: "pending" | "approved" | "rejected";
+  date: string;
+  time: string;
+  originalData?: {
+    dateDebut?: string;
+    dateFin?: string;
+    snjTempDep?: string;
+    snjTempRetour?: string;
+  };
+  responseChefs?: {
+    id?: string;
+    demandeId?: string;
+    responseChef1: "O" | "N" | "I";
+    observationChef1?: string;
+    dateChef1?: string;
+    responseChef2: "O" | "N" | "I";
+    observationChef2?: string;
+    dateChef2?: string;
+    responseChef3: "O" | "N" | "I";
+    observationChef3?: string;
+    dateChef3?: string;
+  };
+  responseRh?: "T" | "N" | "I";
   details: {
-    startDate?: string
-    endDate?: string
-    duration?: string
-    reason?: string
-    comments?: string
-    approver?: string
-    documents?: string[] // URLs or file paths of uploaded files
-    filesReponse?: string[]
-    requestDate?: string
-    approvalDate?: string
-    rejectionDate?: string
-    purpose?: string
-    equipment?: string
-    provider?: string
-    location?: string
-    cost?: string
-    amount?: string
-    repaymentPlan?: string
-    titre?: string | { titre: string }
-    typeFormation?: string | { type: string }
-    theme?: string | { theme: string }
-    typeDocument?: string
-    typePreavance?: string
-    montant?: string
-    heureSortie?: string
-    heureRetour?: string
-    minuteSortie?: string
-    minuteRetour?: string
-    matPers?: any
-    periodeDebut?: string
-    periodeFin?: string
-    nbrJours?: string
-  }
+    titre?: string | FormationTitle;
+    typeFormation?: string | FormationType;
+    theme?: string | FormationTheme;
+    startDate?: string;
+    endDate?: string;
+    duration?: string;
+    nbrJours?: number;
+    typeDocument?: string;
+    typePreavance?: string;
+    montant?: string;
+    horaireSortie?: string;
+    horaireRetour?: string;
+    minuteSortie?: string;
+    minuteRetour?: string;
+    matPers?: any;
+    codeSoc?: string;
+    documents?: Array<{
+      id: string;
+      filename: string;
+      fileType: string;
+      fileId: string;
+    }>;
+    filesReponse?: Array<{
+      id: string;
+      filename: string;
+      fileType: string;
+      fileId: string;
+    }>;
+    typeConge?: string;
+    duree?: number;
+    motif?: string;
+    remplacant?: string;
+    soldeConge?: number;
+    commentaire?: string;
+    approvalDate?: string;
+    rejectionDate?: string;
+    dateDemande?: string;
+  };
 }
 
 // Interface pour les données d'édition
@@ -138,8 +172,8 @@ interface EditableRequestData {
   typeDocument?: string
   typePreavance?: string
   montant?: string
-  heureSortie?: string
-  heureRetour?: string
+  horaireSortie?: string
+  horaireRetour?: string
   minuteSortie?: string
   minuteRetour?: string
   startDate?: string
@@ -156,6 +190,23 @@ interface EditableRequestData {
   titreId?: string
   typeId?: string
   themeId?: string
+}
+
+// Update the DemandesListProps interface to use our Request type
+export interface DemandesListProps {
+  filteredRequests: Request[]
+  onSelectRequest: (request: Request) => void
+  isDarkMode: boolean
+  themeStyles: any
+  searchQuery: string
+  setSearchQuery: React.Dispatch<React.SetStateAction<string>>
+  activeFilter: string
+  setActiveFilter: React.Dispatch<React.SetStateAction<string>>
+  activeTypeFilter: string
+  setActiveTypeFilter: React.Dispatch<React.SetStateAction<string>>
+  filterRequests: (status: string, type?: string) => void
+  searchRequests: (text: string) => void
+  loading?: boolean
 }
 
 const DemandesPage = () => {
@@ -176,75 +227,86 @@ const DemandesPage = () => {
   const [dateDebut, setDateDebut] = useState<Date | null>(null)
   const [dateFin, setDateFin] = useState<Date | null>(null)
 
+  const fetchWithValidation = async (url: string, token: string) => {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`API request failed: ${response.status} ${response.statusText}`);
+      return null; // Return null instead of throwing to continue processing other endpoints
+    }
+
+    const text = await response.text();
+    return text ? JSON.parse(text) : []; // Return empty array if response is empty
+  } catch (error) {
+    console.error(`Error fetching from ${url}:`, error);
+    return null; // Return null to indicate failure
+  }
+};
+
   // Utiliser useApiPooling pour les demandes
-  const {
-    data: requests,
-    loading,
-    error,
-    refresh: refreshRequests,
-  } = useApiPooling<Request[]>({
-    apiCall: async () => {
-      if (!userId) {
-        throw new Error("ID utilisateur non disponible")
-      }
+const {
+  data: requests,
+  loading,
+  error,
+  refresh: refreshRequests,
+} = useApiPooling<Request[]>({
+  apiCall: async () => {
+    if (!userId) {
+      throw new Error("ID utilisateur non disponible");
+    }
 
-      const token = await AsyncStorage.getItem("userToken")
-      if (!token) {
-        throw new Error("Token d'authentification non disponible")
-      }
+    const token = await AsyncStorage.getItem("userToken");
+    if (!token) {
+      throw new Error("Token d'authentification non disponible");
+    }
 
-      // Define the API endpoints for different request types
-      const endpoints = [
-        `/api/demande-autorisation/personnel/${userId}`,
-        `/api/demande-conge/personnel/${userId}`,
-        `/api/demande-formation/personnel/${userId}`,
-        `/api/demande-pre-avance/personnel/${userId}`,
-        `/api/demande-document/personnel/${userId}`,
-      ]
+    const endpoints = [
+      `/api/demande-autorisation/personnel/${userId}`,
+      `/api/demande-conge/personnel/${userId}`,
+      `/api/demande-formation/personnel/${userId}`,
+      `/api/demande-pre-avance/personnel/${userId}`,
+      `/api/demande-document/personnel/${userId}`,
+    ];
 
-      // Fetch data from all endpoints
-      const responses = await Promise.all(
-        endpoints.map((endpoint) =>
-          fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-            .then((response) => {
-              if (!response.ok) {
-                console.warn(`Failed to fetch from ${endpoint}`)
-                return []
-              }
-              return response.json()
-            })
-            .catch((error) => {
-              console.error(`Error fetching from ${endpoint}:`, error)
-              return []
-            }),
-        ),
+    // Fetch data from all endpoints with validation
+    const responses = await Promise.all(
+      endpoints.map((endpoint) =>
+        fetchWithValidation(
+          `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`,
+          token
+        )
       )
+    );
 
-      // Process and combine all responses
-      const [autorisations, conges, formations, preAvances, documents] = responses
+    // Filter out null responses (failed requests)
+    const validResponses = responses.filter((response) => response !== null);
 
-      // Map and normalize the data
-      const allDemandes: Request[] = [
-        ...mapDemandes(autorisations, "autorisation"),
-        ...mapDemandes(conges, "congé"),
-        ...mapDemandes(formations, "formation"),
-        ...mapDemandes(preAvances, "pre-avance"),
-        ...mapDemandes(documents, "document"),
-      ]
+    // If all requests failed, throw an error
+    if (validResponses.length === 0) {
+      throw new Error("Toutes les requêtes API ont échoué");
+    }
 
-      // Sort by date (newest first)
-      allDemandes.sort((a, b) => {
-        const dateA = new Date(a.date.split("/").reverse().join("-"))
-        const dateB = new Date(b.date.split("/").reverse().join("-"))
-        return dateB.getTime() - dateA.getTime()
-      })
+    // Process and combine all responses
+    const [autorisations, conges, formations, preAvances, documents] = responses.map(
+      (res) => res || [] // Use empty array if response was null
+    );
 
-      return allDemandes
-    },
+    // Rest of your mapping logic...
+    const allDemandes: Request[] = [
+      ...mapDemandes(autorisations || [], "autorisation"),
+      ...mapDemandes(conges || [], "congé"),
+      ...mapDemandes(formations || [], "formation"),
+      ...mapDemandes(preAvances || [], "pre-avance"),
+      ...mapDemandes(documents || [], "document"),
+    ];
+
+    return allDemandes;
+  },
     storageKey: "user_requests_data",
     poolingInterval: 60000, // 1 minute
     initialData: [],
@@ -360,35 +422,107 @@ const DemandesPage = () => {
     return String(value)
   }
 
-  // Update the mapDemandes function to handle complex objects from DemandeFormation
+  // Add format functions
+  const formatDate = (dateString: string) => {
+    if (!dateString) return ""
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return dateString
+      return date.toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    } catch (error) {
+      console.error("Error formatting date:", error)
+      return dateString
+    }
+  }
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return ""
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return ""
+      return date.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch (error) {
+      console.error("Error formatting time:", error)
+      return ""
+    }
+  }
+
+  // Update the getRequestStatus function
+  const getRequestStatus = (request: Request): "pending" | "approved" | "rejected" => {
+    // Check if it's a document or pre-avance request
+    if (request.type.toLowerCase().includes("document") || request.type.toLowerCase().includes("pre-avance")) {
+      if (!request.responseRh) return "pending";
+      
+      switch (request.responseRh) {
+        case "T":
+          return "approved"
+        case "N":
+          return "rejected"
+        case "I":
+        default:
+          return "pending"
+      }
+    }
+    
+    // For other request types, use responseChefs
+    if (!request.responseChefs) return "pending";
+    
+    switch (request.responseChefs.responseChef1) {
+      case "O":
+        return "approved"
+      case "N":
+        return "rejected"
+      case "I":
+      default:
+        return "pending"
+    }
+  }
+
+  // Update the mapDemandes function with proper types
   const mapDemandes = (data: any[], type: string): Request[] => {
     if (!Array.isArray(data)) return []
 
-    return data.map((item) => {
-      // Determine status based on reponseChef
-      let status: "pending" | "approved" | "rejected"
-      if (item.reponseChef === "I") {
-        status = "pending"
-      } else if (item.reponseChef === "O") {
-        status = "approved"
-      } else {
-        status = "rejected"
-      }
+    return data.map((item: any) => {
+      // Get the submission date (prioritize dateDemande)
+      const submissionDate = item.dateDemande || "N/A";
+      const formattedDate = submissionDate === "N/A" ? "N/A" : formatDate(submissionDate);
+      const formattedTime = submissionDate === "N/A" ? "" : formatTime(submissionDate);
+      
+      const status = getRequestStatus({
+        id: item.id || item._id,
+        type,
+        description: item.texteDemande || item.description || `Demande de ${type}`,
+        status: "pending", // This will be overridden by getRequestStatus
+        date: formattedDate,
+        time: formattedTime,
+        responseChefs: item.responseChefs,
+        responseRh: item.reponseRH,
+        details: {
+          ...item,
+          dateDemande: submissionDate, // Add dateDemande to details
+          startDate: formatDate(item.dateDebut),
+          endDate: formatDate(item.dateFin),
+          duration: item.nbrJours?.toString(),
+          montant: item.montant?.toString(),
+        },
+      })
 
-      const demandDate = new Date(item.dateDemande)
-
-      // Process the data to ensure all values are safe for rendering
-      const safeItem = {
-        id: item.id_libre_demande || item.id,
-        type: renderSafeText(type),
-        description: renderSafeText(item.texteDemande) || "Pas de description",
-        status: status,
-        date: demandDate.toLocaleDateString("fr-FR"), // "14/04/2025"
-        time: demandDate.toLocaleTimeString("fr-FR", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }),
+      return {
+        id: item.id || item._id,
+        type,
+        description: item.texteDemande || item.description || `Demande de ${type}`,
+        status,
+        date: formattedDate,
+        time: formattedTime,
+        responseChefs: item.responseChefs,
+        responseRh: item.reponseRH,
         originalData: {
           dateDebut: item.dateDebut,
           dateFin: item.dateFin,
@@ -396,28 +530,16 @@ const DemandesPage = () => {
           snjTempRetour: item.snjTempRetour,
         },
         details: {
-          startDate: item.dateDebut ? new Date(item.dateDebut).toLocaleDateString("fr-FR") : undefined,
-          endDate: item.dateFin ? new Date(item.dateFin).toLocaleDateString("fr-FR") : undefined,
+          ...item,
+          dateDemande: submissionDate, // Add dateDemande to details
+          startDate: formatDate(item.dateDebut),
+          endDate: formatDate(item.dateFin),
           duration: item.nbrJours?.toString(),
-          reason: renderSafeText(item.texteDemande),
-          documents: item.files?.map((file: any) => renderSafeText(file?.filename) ?? "Aucun fichier fourni") ?? [],
-          // Store the original objects for title, type, and theme to be processed later with renderSafeText
-          titre: item.titre,
-          typeFormation: item.type,
-          theme: item.theme,
-          typeDocument: renderSafeText(item.typeDocument),
-          filesReponse:
-            item.filesReponse?.map((file: any) => renderSafeText(file?.filename) ?? "Aucun fichier fourni") ?? [],
-          typePreavance: renderSafeText(item.type),
           montant: item.montant?.toString(),
-          heureSortie: renderSafeText(item.heureSortie),
-          heureRetour: renderSafeText(item.heureRetour),
-          minuteSortie: renderSafeText(item.minuteSortie),
-          minuteRetour: renderSafeText(item.minuteRetour),
+          documents: Array.isArray(item.files) ? item.files : [],
+          filesReponse: Array.isArray(item.filesReponse) ? item.filesReponse : [],
         },
       }
-
-      return safeItem
     })
   }
 
@@ -438,65 +560,41 @@ const DemandesPage = () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)
     try {
-      // Update both keys for backward compatibility
       await AsyncStorage.setItem("theme", newTheme)
       await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde des préférences de thème:", error)
+      console.error("Error saving theme preference:", error)
     }
   }
 
   // Filtrer les demandes par statut et type
   const filterRequests = (status: string, type: string = activeTypeFilter) => {
-    setActiveFilter(status)
-    if (type !== activeTypeFilter) {
-      setActiveTypeFilter(type)
-    }
+    let filtered = [...(requests || [])]
 
-    if (!requests || requests.length === 0) {
-      console.log("No requests to filter")
-      setFilteredRequests([])
-      return
-    }
-
-    let filtered = [...requests]
-
-    // Filtrer par statut
-    if (status !== "all") {
-      filtered = filtered.filter((request) => request.status === status)
-    }
-
-    // Filtrer par type
+    // Filter by type first
     if (type !== "all") {
+      filtered = filtered.filter((request) => request.type.toLowerCase().includes(type.toLowerCase()))
+    }
+
+    // Then filter by status
+    if (status !== "all") {
       filtered = filtered.filter((request) => {
-        const requestType = request.type.toLowerCase()
-        switch (type) {
-          case "conge":
-            return requestType.includes("congé")
-          case "formation":
-            return requestType.includes("formation")
-          case "avance":
-            return requestType.includes("pre-avance")
-          case "document":
-            return requestType.includes("document")
-          case "autorisation":
-            return requestType.includes("autorisation")
+        if (!request.responseChefs) return status === "pending"
+        
+        switch (request.responseChefs.responseChef1) {
+          case "O":
+            return status === "approved"
+          case "N":
+            return status === "rejected"
+          case "I":
           default:
-            return true
+            return status === "pending"
         }
       })
     }
 
-    // Appliquer la recherche
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (request) =>
-          request.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          request.description.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    }
-
-    console.log(`Filtered requests: ${filtered.length} items`)
+    setActiveFilter(status)
+    setActiveTypeFilter(type)
     setFilteredRequests(filtered)
   }
 
@@ -519,162 +617,82 @@ const DemandesPage = () => {
     setShowDetailsModal(true)
   }
 
-  // Update the prepareForEdit function to initialize all fields based on request type
+  // Update the prepareForEdit function to handle the new types
   const prepareForEdit = (request: Request) => {
     setEditingRequest(request)
     console.log("Editing request:", request)
 
-    // Initialiser les dates avec les valeurs de la base de données
-    let startDateObj = null
-    let endDateObj = null
-
-    // Essayer d'abord avec originalData, puis avec details.startDate/endDate
-    if (request.originalData?.dateDebut) {
-      startDateObj = new Date(request.originalData.dateDebut)
-      setDateDebut(startDateObj)
-    } else if (request.details.startDate) {
-      // Convertir le format français (DD/MM/YYYY) en format Date
-      const [day, month, year] = request.details.startDate.split("/").map(Number)
-      if (day && month && year) {
-        startDateObj = new Date(year, month - 1, day)
-        setDateDebut(startDateObj)
-      }
-    }
-
-    if (request.originalData?.dateFin) {
-      endDateObj = new Date(request.originalData.dateFin)
-      setDateFin(endDateObj)
-    } else if (request.details.endDate) {
-      // Convertir le format français (DD/MM/YYYY) en format Date
-      const [day, month, year] = request.details.endDate.split("/").map(Number)
-      if (day && month && year) {
-        endDateObj = new Date(year, month - 1, day)
-        setDateFin(endDateObj)
-      }
-    }
-
-    // Formater les dates pour le formulaire (YYYY-MM-DD)
-    const startDateStr = startDateObj ? startDateObj.toISOString().split("T")[0] : ""
-    const endDateStr = endDateObj ? endDateObj.toISOString().split("T")[0] : ""
-
-    // Déterminer les périodes (matin/après-midi)
-    let periodeDebutValue = "matin"
-    if (request.details.periodeDebut) {
-      periodeDebutValue = request.details.periodeDebut
-    } else if (request.originalData && request.originalData.snjTempDep) {
-      periodeDebutValue = request.originalData.snjTempDep === "M" ? "matin" : "après-midi"
-    }
-
-    let periodeFinValue = "matin"
-    if (request.details.periodeFin) {
-      periodeFinValue = request.details.periodeFin
-    } else if (request.originalData && request.originalData.snjTempRetour) {
-      periodeFinValue = request.originalData.snjTempRetour === "M" ? "matin" : "après-midi"
-    }
-
-    // Extract IDs for titre, type, and theme if they are objects
-    let titreId = ""
-    let typeId = ""
-    let themeId = ""
-
-    if (request.details.titre && typeof request.details.titre === "object" && "id" in request.details.titre) {
-      titreId = request.details.titre.id
-    }
-
-    if (
-      request.details.typeFormation &&
-      typeof request.details.typeFormation === "object" &&
-      "id" in request.details.typeFormation
-    ) {
-      typeId = request.details.typeFormation.id
-    }
-
-    if (request.details.theme && typeof request.details.theme === "object" && "id" in request.details.theme) {
-      themeId = request.details.theme.id
-    }
-
-    // Préparer les données éditables avec toutes les valeurs existantes
+    // Set up the editable data first
     setEditableData({
       description: request.description,
-      titre: renderSafeText(request.details.titre),
-      titreId: titreId,
-      theme: renderSafeText(request.details.theme),
-      themeId: themeId,
-      typeFormation: renderSafeText(request.details.typeFormation),
-      typeId: typeId,
+      titre: typeof request.details.titre === 'object' ? request.details.titre.titre : request.details.titre,
+      titreId: typeof request.details.titre === 'object' ? request.details.titre.id : undefined,
+      theme: typeof request.details.theme === 'object' ? request.details.theme.theme : request.details.theme,
+      themeId: typeof request.details.theme === 'object' ? request.details.theme.id : undefined,
+      typeFormation: typeof request.details.typeFormation === 'object' ? request.details.typeFormation.type : request.details.typeFormation,
+      typeId: typeof request.details.typeFormation === 'object' ? request.details.typeFormation.id : undefined,
       duration: renderSafeText(request.details.duration || request.details.nbrJours),
       typeDocument: renderSafeText(request.details.typeDocument),
       typePreavance: renderSafeText(request.details.typePreavance),
       montant: renderSafeText(request.details.montant),
-      // Pour les dates, utiliser le format ISO pour les inputs de date
-      startDate: startDateStr,
-      endDate: endDateStr,
-      periodeDebut: periodeDebutValue,
-      periodeFin: periodeFinValue,
-      heureSortie: renderSafeText(request.details.heureSortie),
-      heureRetour: renderSafeText(request.details.heureRetour),
+      startDate: request.originalData?.dateDebut || "",
+      endDate: request.originalData?.dateFin || "",
+      periodeDebut: request.originalData?.snjTempDep === "M" ? "matin" : "après-midi",
+      periodeFin: request.originalData?.snjTempRetour === "M" ? "matin" : "après-midi",
+      horaireSortie: renderSafeText(request.details.horaireSortie),
+      horaireRetour: renderSafeText(request.details.horaireRetour),
       minuteSortie: renderSafeText(request.details.minuteSortie),
       minuteRetour: renderSafeText(request.details.minuteRetour),
     })
-
-    console.log("Editable data initialized:", {
-      startDate: startDateStr,
-      endDate: endDateStr,
-      periodeDebut: periodeDebutValue,
-      periodeFin: periodeFinValue,
-      dateDebut: startDateObj ? startDateObj.toLocaleDateString() : "null",
-      dateFin: endDateObj ? endDateObj.toLocaleDateString() : "null",
-      titreId: titreId,
-      typeId: typeId,
-      themeId: themeId,
-    })
-
+    
+    // Close details modal and show edit modal
+    setShowDetailsModal(false)
     setShowEditModal(true)
   }
 
   // Delete request
-  const handleDeleteRequest = async (requestId: string, requestType: string) => {
-    try {
-      const token = await AsyncStorage.getItem("userToken")
-      if (!token) {
-        console.error("Authentication token not found")
-        Toast.show({
-          type: "error",
-          text1: "Erreur",
-          text2: "Token d'authentification non trouvé",
-        })
-        return
-      }
+const handleDeleteRequest = async (requestId: string, requestType: string) => {
+  try {
+    const token = await AsyncStorage.getItem("userToken");
+    if (!token) {
+      console.error("Authentication token not found");
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Token d'authentification non trouvé",
+      });
+      return;
+    }
 
-      const endpointMap: { [key: string]: string } = {
-        autorisation: "/api/demande-autorisation",
-        congé: "/api/demande-conge",
-        formation: "/api/demande-formation",
-        "pre-avance": "/api/demande-pre-avance",
-        document: "/api/demande-document",
-      }
+    const endpointMap: Record<string, string> = {
+      autorisation: "demande-autorisation",
+      congé: "demande-conge",
+      formation: "demande-formation",
+      "pre-avance": "demande-pre-avance",
+      document: "demande-document",
+    };
 
-      // Find the correct endpoint based on request type
-      let endpoint = ""
-      for (const [key, value] of Object.entries(endpointMap)) {
-        if (requestType.toLowerCase().includes(key.toLowerCase())) {
-          endpoint = value
-          break
-        }
-      }
+    const typeKey = Object.keys(endpointMap).find(key => 
+      requestType.toLowerCase().includes(key.toLowerCase())
+    );
 
-      if (!endpoint) {
-        console.error("Unknown request type:", requestType)
-        Toast.show({
-          type: "error",
-          text1: "Erreur",
-          text2: "Type de demande inconnu",
-        })
-        return
-      }
+    if (!typeKey) {
+      console.error("Unknown request type:", requestType);
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Type de demande inconnu",
+      });
+      return;
+    }
 
-      // Use Alert.alert with proper text components
-      Alert.alert("Confirmation", "Êtes-vous sûr de vouloir supprimer cette demande ?", [
+    const endpoint = `/api/${endpointMap[typeKey]}/${requestId}`;
+    const fullUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`;
+
+    Alert.alert(
+      "Confirmation", 
+      "Êtes-vous sûr de vouloir supprimer cette demande ?", 
+      [
         {
           text: "Annuler",
           style: "cancel",
@@ -684,68 +702,58 @@ const DemandesPage = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              console.log(`Deleting request: ${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${requestId}`)
+              console.log(`Deleting request: ${fullUrl}`);
 
-              // Add a timeout to the fetch request
-              const controller = new AbortController()
-              const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-              // For formation requests, use a different approach
-              if (requestType.toLowerCase().includes("formation")) {
-                // Try using a POST request to a specific delete endpoint
-                const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${requestId}`, {
-                  method: "DELETE",
+              // First try DELETE method
+              let response = await fetch(fullUrl, {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                signal: controller.signal,
+              });
+
+              // If DELETE not allowed, try POST to delete endpoint
+              if (response.status === 405) {
+                response = await fetch(`${fullUrl}/delete`, {
+                  method: "POST",
                   headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                   },
                   signal: controller.signal,
-                })
-
-                clearTimeout(timeoutId)
-
-                if (!response.ok) {
-                  const errorText = await response.text()
-                  throw new Error(`Failed to delete request: ${errorText}`)
-                }
-              } else {
-                // For other request types, try DELETE first
-                let response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${requestId}`, {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                  signal: controller.signal,
-                })
-
-                // If DELETE is not supported, try using a POST request with a special parameter
-                if (response.status === 405) {
-                  // Method Not Allowed
-                  console.log("DELETE method not supported, trying alternative approach")
-
-                  // Try with POST to a delete endpoint
-                  response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/delete/${requestId}`, {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      "Content-Type": "application/json",
-                    },
-                    signal: controller.signal,
-                  })
-                }
-
-                clearTimeout(timeoutId)
-
-                if (!response.ok) {
-                  const errorText = await response.text()
-                  throw new Error(`Failed to delete request: ${errorText}`)
-                }
+                });
               }
 
-              // Refresh data after successful deletion
-              await refreshRequests(true)
-              setShowDetailsModal(false)
+              clearTimeout(timeoutId);
+
+              // Don't try to parse JSON if response is empty (204)
+              if (response.status === 204) {
+                console.log("Delete successful (204 No Content)");
+              } else if (!response.ok) {
+                // Try to get error message, but don't fail if parsing fails
+                let errorText = "Échec de la suppression";
+                try {
+                  const errorData = await response.text();
+                  errorText = errorData || errorText;
+                } catch (e) {
+                  console.log("Couldn't parse error response", e);
+                }
+                throw new Error(errorText);
+              }
+
+              // Success - refresh data silently
+              try {
+                await refreshRequests(true);
+              } catch (refreshError) {
+                console.log("Refresh after delete failed (non-critical)", refreshError);
+              }
+
+              setShowDetailsModal(false);
 
               Toast.show({
                 type: "success",
@@ -753,43 +761,44 @@ const DemandesPage = () => {
                 text2: "Votre demande a été supprimée avec succès",
                 position: "bottom",
                 visibilityTime: 4000,
-                autoHide: true,
-              })
+              });
             } catch (error) {
-              if (error.name === "AbortError") {
-                console.error("Request timed out")
-                Toast.show({
-                  type: "error",
-                  text1: "Erreur de connexion",
-                  text2: "La requête a pris trop de temps. Veuillez réessayer.",
-                  position: "bottom",
-                  visibilityTime: 4000,
-                  autoHide: true,
-                })
-              } else {
-                console.error("Error deleting request:", error)
+              clearTimeout(timeoutId);
+              console.error("Delete error:", error);
+
+              // Only show user-facing error if not a JSON parse error
+              if (!(error instanceof SyntaxError)) {
+                const errorMessage = error instanceof Error 
+                  ? error.message.includes("aborted")
+                    ? "La requête a expiré"
+                    : error.message
+                  : "Erreur inconnue";
+
                 Toast.show({
                   type: "error",
                   text1: "Échec de la suppression",
-                  text2: `${error instanceof Error ? error.message : "Une erreur est survenue lors de la suppression"}`,
+                  text2: errorMessage,
                   position: "bottom",
                   visibilityTime: 4000,
-                  autoHide: true,
-                })
+                });
               }
             }
           },
         },
-      ])
-    } catch (error) {
-      console.error("Error in delete process:", error)
+      ]
+    );
+  } catch (error) {
+    console.error("Error in delete process:", error);
+    // Only show non-JSON parse errors
+    if (!(error instanceof SyntaxError)) {
       Toast.show({
         type: "error",
         text1: "Erreur",
-        text2: `Une erreur est survenue: ${error instanceof Error ? error.message : "Erreur inconnue"}`,
-      })
+        text2: "Une erreur est survenue lors de la suppression",
+      });
     }
   }
+};
 
   // Update the handleUpdateRequest function to handle the formation dropdown IDs
   const handleUpdateRequest = async () => {
@@ -953,15 +962,15 @@ const DemandesPage = () => {
           requestData.dateDebut = editableData.startDate
         }
 
-        if (editableData.heureSortie) {
-          const [hours, minutes] = editableData.heureSortie.split(":")
-          requestData.heureSortie = hours
+        if (editableData.horaireSortie && editableData.minuteSortie) {
+          const [hours, minutes] = editableData.horaireSortie.split(":")
+          requestData.horaireSortie = hours
           requestData.minuteSortie = minutes
         }
 
-        if (editableData.heureRetour) {
-          const [hours, minutes] = editableData.heureRetour.split(":")
-          requestData.heureRetour = hours
+        if (editableData.horaireRetour && editableData.minuteRetour) {
+          const [hours, minutes] = editableData.horaireRetour.split(":")
+          requestData.horaireRetour = hours
           requestData.minuteRetour = minutes
         }
       }
@@ -996,14 +1005,30 @@ const DemandesPage = () => {
 
       // Handle document specific fields
       if (editingRequest.type.toLowerCase().includes("document")) {
+        // Set the typeDemande field
+        requestData.typeDemande = "Document"
+
+        // Set the typeDocument field if it exists
         if (editableData.typeDocument) {
           requestData.typeDocument = editableData.typeDocument
         }
-      }
 
-      // Ensure we preserve the personnel reference
-      if (editingRequest.details && "matPers" in editingRequest.details) {
-        requestData.matPers = editingRequest.details.matPers
+        // Set the texteDemande field (description)
+        if (editableData.description) {
+          requestData.texteDemande = editableData.description
+        }
+
+        // Ensure we preserve the matPers reference
+        if (editingRequest.details && editingRequest.details.matPers) {
+          requestData.matPers = editingRequest.details.matPers
+        }
+
+        // Preserve the codeSoc if it exists
+        if (editingRequest.details && editingRequest.details.codeSoc) {
+          requestData.codeSoc = editingRequest.details.codeSoc
+        }
+
+        console.log("Document request data:", requestData)
       }
 
       console.log("Sending update with data:", JSON.stringify(requestData))
@@ -1043,8 +1068,8 @@ const DemandesPage = () => {
         visibilityTime: 4000,
         autoHide: true,
       })
-    } catch (error) {
-      if (error.name === "AbortError") {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === "AbortError") {
         Toast.show({
           type: "error",
           text1: "Erreur de connexion",
@@ -1073,61 +1098,90 @@ const DemandesPage = () => {
     }
   }
 
-  // Define theme styles
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.clear()
+      Toast.show({
+        type: "success",
+        text1: "Déconnexion réussie",
+        text2: "Vous avez été déconnecté avec succès.",
+        visibilityTime: 2000,
+      })
+      navigation.navigate("Authentification")
+    } catch (error) {
+      console.error("Error logging out:", error)
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Échec de la déconnexion. Veuillez réessayer.",
+        visibilityTime: 2000,
+      })
+    }
+  }
+
+  // Define theme styles with proper dark theme colors
   const darkStyles = StyleSheet.create({
     container: {
-      backgroundColor: "#1a1f38",
+      backgroundColor: "#1A1F38", // Updated to blue background
+    },
+    content: {
+      backgroundColor: "#1A1F38", // Match container background
+      flex: 1,
     },
     header: {
-      backgroundColor: "#1F2846",
-      borderBottomColor: "#1a1f38",
+      backgroundColor: "#242B42", // Slightly lighter than container
+      borderBottomColor: "rgba(255,255,255,0.1)",
     },
     searchContainer: {
-      borderBottomColor: "#1a1f38",
+      backgroundColor: "#242B42",
+      borderBottomColor: "rgba(255,255,255,0.1)",
     },
     searchInputContainer: {
-      backgroundColor: "#1a1f38",
-      borderColor: "#1F2846",
+      backgroundColor: "rgba(255,255,255,0.05)",
+      borderColor: "rgba(255,255,255,0.1)",
     },
     searchInput: {
-      color: "#E0E0E0",
+      color: "#FFFFFF",
     },
     filterButton: {
-      borderColor: "#1F2846",
+      borderColor: "rgba(255,255,255,0.1)",
+      backgroundColor: "rgba(255,255,255,0.05)",
     },
     filtersScrollView: {
-      borderBottomColor: "#1a1f38",
+      borderBottomColor: "rgba(255,255,255,0.1)",
     },
     filterChip: {
-      borderColor: "#1F2846",
-      backgroundColor: "#1a1f38",
+      borderColor: "rgba(255,255,255,0.1)",
+      backgroundColor: "rgba(255,255,255,0.05)",
     },
     filterChipText: {
-      color: "#E0E0E0",
+      color: "#FFFFFF",
     },
     text: {
-      color: "#E0E0E0",
+      color: "#FFFFFF",
     },
     subtleText: {
       color: "#AAAAAA",
     },
     card: {
-      backgroundColor: "#1F2846",
+      backgroundColor: "#242B42", // Slightly lighter than container
+      borderColor: "rgba(255,255,255,0.1)",
     },
     activeFilterOption: {
-      backgroundColor: "rgba(147, 112, 219, 0.3)",
+      backgroundColor: "rgba(147,112,219,0.3)",
     },
     detailsActionButton: {
-      backgroundColor: "#1a1f38",
+      backgroundColor: "#0A84FF",
     },
     detailsActionButtonText: {
-      color: "#E0E0E0",
+      color: "#FFFFFF",
     },
     detailsCancelButton: {
-      backgroundColor: "#F44336",
+      backgroundColor: "#242B42",
     },
     detailsCancelButtonText: {
-      color: "#FFFFFF",
+      color: "#FF453A",
     },
   })
 
@@ -1135,6 +1189,9 @@ const DemandesPage = () => {
     container: {
       backgroundColor: "#F5F5F5",
     },
+    content: {
+      backgroundColor: "#F5F5F5", // Match container background
+    },
     header: {
       backgroundColor: "#FFFFFF",
       borderBottomColor: "#E0E0E0",
@@ -1148,10 +1205,11 @@ const DemandesPage = () => {
       borderColor: "#E0E0E0",
     },
     searchInput: {
-      color: "#333",
+      color: "#333333",
     },
     filterButton: {
       borderColor: "#E0E0E0",
+      backgroundColor: "#FFFFFF",
     },
     filtersScrollView: {
       borderBottomColor: "#E0E0E0",
@@ -1161,16 +1219,17 @@ const DemandesPage = () => {
       backgroundColor: "#FFFFFF",
     },
     filterChipText: {
-      color: "#333",
+      color: "#333333",
     },
     text: {
-      color: "#333",
+      color: "#333333",
     },
     subtleText: {
       color: "#757575",
     },
     card: {
       backgroundColor: "#FFFFFF",
+      borderColor: "#E0E0E0",
     },
     activeFilterOption: {
       backgroundColor: "rgba(147, 112, 219, 0.1)",
@@ -1189,61 +1248,57 @@ const DemandesPage = () => {
     },
   })
 
-  // Appliquer les styles de thème
+  // Apply theme styles
   const themeStyles = isDarkMode ? darkStyles : lightStyles
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
-      {/* En-tête */}
-      <View style={[styles.header, themeStyles.header]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("AccueilCollaborateur")}>
-            <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
-          </TouchableOpacity>
-          <View style={styles.headerTitle}>
-            <Text style={[styles.headerTitleText, themeStyles.text]}>Mes demandes</Text>
+      <NavBar
+        title="Mes demandes"
+        showBackButton={true}
+        isDarkMode={isDarkMode}
+        toggleTheme={toggleTheme}
+        handleLogout={handleLogout}
+      />
+
+      <View style={[styles.content, themeStyles.content]}>
+        {loading ? (
+          <View style={[styles.loadingContainer, themeStyles.content]}>
+            <ActivityIndicator size="large" color={isDarkMode ? "#9370DB" : "#9370DB"} />
+            <Text style={[styles.loadingText, themeStyles.text]}>Chargement des demandes...</Text>
           </View>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate("Notifications")}>
-            <Bell size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={toggleTheme}>
-            {isDarkMode ? <Sun size={22} color="#E0E0E0" /> : <Moon size={22} color="#333" />}
-          </TouchableOpacity>
-        </View>
+        ) : error ? (
+          <View style={[styles.errorContainer, themeStyles.content]}>
+            <Text style={[styles.errorText, themeStyles.text]}>Une erreur est survenue lors du chargement des demandes.</Text>
+          </View>
+        ) : (
+          <DemandesList
+            filteredRequests={filteredRequests}
+            onSelectRequest={viewRequestDetails}
+            isDarkMode={isDarkMode}
+            themeStyles={themeStyles}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            activeFilter={activeFilter}
+            setActiveFilter={setActiveFilter}
+            activeTypeFilter={activeTypeFilter}
+            setActiveTypeFilter={setActiveTypeFilter}
+            filterRequests={filterRequests}
+            searchRequests={searchRequests}
+            loading={loading}
+          />
+        )}
       </View>
 
-      {/* Contenu */}
-      {loading && !requests ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#9370DB" />
-        </View>
-      ) : (
-        <DemandesList
-          filteredRequests={filteredRequests}
-          onSelectRequest={viewRequestDetails}
-          isDarkMode={isDarkMode}
-          themeStyles={themeStyles}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          activeFilter={activeFilter}
-          setActiveFilter={setActiveFilter}
-          activeTypeFilter={activeTypeFilter}
-          setActiveTypeFilter={setActiveTypeFilter}
-          filterRequests={filterRequests}
-          searchRequests={searchRequests}
-        />
-      )}
-
       {/* Details Modal */}
-      {selectedRequest && (
-        <Modal
-          visible={showDetailsModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowDetailsModal(false)}
-        >
+      <Modal
+        visible={showDetailsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDetailsModal(false)}
+        statusBarTranslucent={true}
+      >
+        {selectedRequest && (
           <DemandesDetails
             visible={showDetailsModal}
             onClose={() => setShowDetailsModal(false)}
@@ -1254,8 +1309,8 @@ const DemandesPage = () => {
             themeStyles={themeStyles}
             renderSafeText={renderSafeText}
           />
-        </Modal>
-      )}
+        )}
+      </Modal>
 
       {/* Edit Modal */}
       <Modal
@@ -1263,21 +1318,23 @@ const DemandesPage = () => {
         transparent={true}
         animationType="slide"
         onRequestClose={() => setShowEditModal(false)}
+        statusBarTranslucent={true}
       >
-        <DemandesEditModal
-          visible={showEditModal}
-          onClose={() => setShowEditModal(false)}
-          onSave={handleUpdateRequest}
-          editingRequest={editingRequest}
-          editableData={editableData}
-          setEditableData={setEditableData}
-          isDarkMode={isDarkMode}
-          themeStyles={themeStyles}
-          userId={userId}
-        />
+        {editingRequest && (
+          <DemandesEditModal
+            editingRequest={editingRequest}
+            editableData={editableData}
+            setEditableData={setEditableData}
+            isDarkMode={isDarkMode}
+            themeStyles={themeStyles}
+            userId={userId}
+            onSave={handleUpdateRequest}
+            onClose={() => setShowEditModal(false)}
+          />
+        )}
       </Modal>
 
-      {/* Pied de page */}
+      {/* Footer */}
       <Footer />
     </SafeAreaView>
   )
@@ -1287,52 +1344,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 40, // More space for status bar
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-    zIndex: 10,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  headerTitleText: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconButton: {
-    padding: 8,
-    borderRadius: 20,
-    marginLeft: 8,
+  content: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 15,
+    textAlign: "center",
+  }
 })
 
 export default DemandesPage

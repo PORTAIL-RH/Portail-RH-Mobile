@@ -14,13 +14,15 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
-  ActivityIndicator,
 } from "react-native";
 import axios from "axios";
+import { AxiosError } from 'axios';
+import { ActivityIndicator } from 'react-native';
+
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Toast from "react-native-toast-message";
+import Toast from "react-native-toast-message"; 
 import { API_CONFIG } from "../config/apiConfig";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -29,7 +31,6 @@ import { Feather } from "@expo/vector-icons";
 type AuthentificationStackParamList = {
   Authentification: undefined;
   AccueilCollaborateur: undefined;
-  AdminDashboard: undefined;
 };
 
 // Define the navigation prop type
@@ -123,17 +124,20 @@ const BackgroundWithMouseEffect = ({ theme }: { theme: string }) => {
 const Authentication = () => {
   const navigation = useNavigation<AuthentificationNavigationProp>();
   const [action, setAction] = useState<"Login" | "Sign up">("Login");
-  const [nom, setNom] = useState("");
-  const [prenom, setPrenom] = useState("");
+  const [nom, setNom] = useState(""); // Last name
+  const [prenom, setPrenom] = useState(""); // First name
   const [email, setEmail] = useState("");
   const [matricule, setMatricule] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("light");
+  const [loginError, setLoginError] = useState<AxiosError<any> | null>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockExpiration, setBlockExpiration] = useState<number | null>(null);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
 
   // Initialize theme from AsyncStorage
   useEffect(() => {
@@ -262,116 +266,98 @@ const Authentication = () => {
 
     checkBlockStatus();
   }, []);
-
+  
   const handleLogin = async () => {
-    if (!matricule?.trim() || !password?.trim()) {
-      showToast("error", "Matricule and password are required");
-      return;
-    }
-
-    const blockedUntil = await AsyncStorage.getItem("blockedUntil");
-    if (blockedUntil && Date.now() < parseInt(blockedUntil)) {
-      const minutesLeft = Math.ceil((parseInt(blockedUntil) - Date.now()) / 60000);
-      showToast("error", `Account locked. Try again in ${minutesLeft} minutes.`);
+    if (!matricule || !password) {
+      showToast("error", "Matricule et mot de passe sont obligatoires");
       return;
     }
 
     setLoading(true);
-
     try {
-      const loginPayload = {
-        matricule: matricule.trim(),
-        password: password.trim(),
-      };
+      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`, {
+        matricule,
+        password
+      });
 
-      console.log("Login payload:", loginPayload);
-
-      const response = await axios.post(
-        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`,
-        loginPayload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          timeout: 10000,
+      if (response.status === 200) {
+        const { token, user } = response.data;
+        
+        // Block admin users from connecting
+        if (user.role === "admin") {
+          showToast("error", "Les administrateurs ne sont pas autorisés à se connecter via l'application mobile.");
+          setLoading(false);
+          return;
         }
-      );
 
-      if (response.data?.token) {
-        await storeAuthData({
-          token: response.data.token,
-          user: response.data.user,
-        });
+        // Allow RH, Chef Hiérarchique, and collaborateur
+        if (!["RH", "Chef Hiérarchique", "collaborateur"].includes(user.role)) {
+          showToast("error", "Rôle non autorisé pour l'application mobile.");
+          setLoading(false);
+          return;
+        }
 
-        await AsyncStorage.multiRemove(["failedAttempts", "blockedUntil"]);
-        setFailedAttempts(0);
+        // Store all user information
+        await AsyncStorage.multiSet([
+          ["userToken", token],
+          ["userId", user.id],
+          ["userInfo", JSON.stringify(user)],
+          ["userCodeSoc", user.code_soc || ""],
+          ["userService", user.serviceName || ""],
+          ["theme", theme]
+        ]);
 
-        showToast("success", "Login successful!");
+        showToast("success", "Connexion réussie!");
 
         setTimeout(() => {
-          const { role } = response.data.user;
-          if (role === "collaborateur") {
-            navigation.navigate("AccueilCollaborateur");
-          } else {
-            navigation.navigate("AdminDashboard");
-          }
-        }, 1500);
+          navigation.navigate("AccueilCollaborateur");
+        }, 2000);
       }
-    } catch (error: any) {
-      console.error("Login error:", error.response?.data || error.message);
-
+    } catch (err: unknown) {
+      const error = err as AxiosError<any>;
+      setLoginError(error);
+    
+      console.error("Error logging in:", error);
+    
       if (error.response) {
-        const { status, data } = error.response;
-
-        if (status === 401 && data.error === "Account locked") {
-          const lockDuration = 30 * 60 * 1000;
-          const expirationTime = Date.now() + lockDuration;
-
-          await AsyncStorage.setItem("blockedUntil", expirationTime.toString());
-          setIsBlocked(true);
-          setBlockExpiration(expirationTime);
-
-          showToast("error", "Account locked. Try again in 30 minutes.");
+        if (error.response.data?.error === "Account locked") {
+          showToast("error", error.response.data.message || "Compte bloqué. Veuillez réessayer plus tard.");
           return;
         }
-
-        if (status === 401) {
-          const newAttempts = failedAttempts + 1;
-          setFailedAttempts(newAttempts);
-          await AsyncStorage.setItem("failedAttempts", newAttempts.toString());
-
-          if (newAttempts >= 3) {
-            const lockDuration = 30 * 60 * 1000;
-            const expirationTime = Date.now() + lockDuration;
-
-            await AsyncStorage.setItem("blockedUntil", expirationTime.toString());
-            setIsBlocked(true);
-            setBlockExpiration(expirationTime);
-
-            showToast("error", "Too many attempts. Account locked for 30 minutes.");
-          } else {
-            showToast(
-              "error",
-              `Invalid credentials (${3 - newAttempts} attempts left)`
-            );
-          }
-          return;
-        }
-
-        if (status === 400) {
-          const errorMsg = data.message || "Invalid request format";
-          showToast("error", `Error: ${errorMsg}`);
-          return;
-        }
+    
+        showToast("error", error.response.data?.message || "Identifiants incorrects");
+      } else {
+        showToast("error", "Erreur de connexion");
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleRequestPasswordReset = async () => {
+    if (!resetEmail) {
+      showToast("error", "Veuillez entrer votre email");
+      return;
+    }
 
-      showToast(
-        "error",
-        error.message.includes("timeout")
-          ? "Connection timeout"
-          : "Network error. Please try again."
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/request-password-reset`,
+        { email: resetEmail }
       );
+
+      if (response.status === 200) {
+        showToast(
+          "success",
+          "Si un compte existe avec cet email, un lien de réinitialisation a été envoyé"
+        );
+        setShowResetPassword(false);
+        setResetEmail("");
+      }
+    } catch (error) {
+      console.error("Error requesting password reset:", error);
+      showToast("error", "Une erreur est survenue");
     } finally {
       setLoading(false);
     }
@@ -419,166 +405,332 @@ const Authentication = () => {
           </View>
 
           <View style={[styles.authCard, isDark ? styles.authCardDark : styles.authCardLight]}>
-            <View style={styles.header}>
-              <Text
-                style={[
-                  styles.headerTitle,
-                  isDark ? styles.textLight : styles.textDark,
-                  styles.gradientText,
-                ]}
-              >
-                {action === "Login" ? "Connexion au portail RH" : "Créer un compte"}
-              </Text>
+            {!showResetPassword ? (
+              <>
+                <View style={styles.header}>
+                  <Text
+                    style={[
+                      styles.headerTitle,
+                      isDark ? styles.textLight : styles.textDark,
+                      styles.gradientText,
+                    ]}
+                  >
+                    {action === "Login" ? "Connexion au portail RH" : "Créer un compte"}
+                  </Text>
 
-              <Text
-                style={[
-                  styles.headerSubtitle,
-                  isDark ? styles.textLightSecondary : styles.textDarkSecondary,
-                ]}
-              >
-                {action === "Login"
-                  ? "Entrez vos identifiants pour accéder à votre espace personnel"
-                  : "Remplissez le formulaire pour créer votre compte"}
-              </Text>
+                  <Text
+                    style={[
+                      styles.headerSubtitle,
+                      isDark ? styles.textLightSecondary : styles.textDarkSecondary,
+                    ]}
+                  >
+                    {action === "Login"
+                      ? "Entrez vos identifiants pour accéder à votre espace personnel"
+                      : "Remplissez le formulaire pour créer votre compte"}
+                  </Text>
 
-              <TouchableOpacity
-                style={styles.switchButton}
-                onPress={() => {
-                  setAction(action === "Login" ? "Sign up" : "Login");
-                  setNom("");
-                  setPrenom("");
-                  setMatricule("");
-                  setEmail("");
-                  setPassword("");
-                  setConfirmPassword("");
-                }}
-                disabled={loading}
-              >
-                <Text style={styles.switchText}>
-                  {action === "Login" ? "Créer un compte" : "Se connecter"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                  <TouchableOpacity
+                    style={styles.switchButton}
+                    onPress={() => {
+                      setAction(action === "Login" ? "Sign up" : "Login");
+                      setNom("");
+                      setPrenom("");
+                      setMatricule("");
+                      setEmail("");
+                      setPassword("");
+                      setConfirmPassword("");
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.switchText}>
+                      {action === "Login" ? "Créer un compte" : "Se connecter"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-            <View style={styles.formContainer}>
-              {isBlocked && (
-                <View style={styles.blockedMessage}>
-                  <Feather
-                    name="lock"
-                    size={24}
-                    color="#F44336"
-                    style={styles.blockedIcon}
-                  />
-                  <Text style={styles.blockedText}>
-                    Compte bloqué après 3 tentatives échouées.
-                    {blockExpiration && (
-                      <Text>
-                        {"\n"}Réessayez dans{" "}
-                        {Math.ceil((blockExpiration - Date.now()) / 60000)}{" "}
-                        minutes.
+                <View style={styles.formContainer}>
+                  {isBlocked && (
+                    <View style={styles.blockedMessage}>
+                      <Feather
+                        name="lock"
+                        size={24}
+                        color="#F44336"
+                        style={styles.blockedIcon}
+                      />
+                      <Text style={styles.blockedText}>
+                        Compte bloqué après 3 tentatives échouées.
+                        {blockExpiration && (
+                          <Text>
+                            {"\n"}Réessayez dans{" "}
+                            {Math.ceil((blockExpiration - Date.now()) / 60000)}{" "}
+                            minutes.
+                          </Text>
+                        )}
                       </Text>
-                    )}
+                    </View>
+                  )}
+
+                  {action === "Sign up" && (
+                    <>
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                          Nom
+                        </Text>
+                        <View
+                          style={[
+                            styles.inputWrapper,
+                            isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                          ]}
+                        >
+                          <Feather
+                            name="user"
+                            size={20}
+                            color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                            style={styles.inputIcon}
+                          />
+                          <TextInput
+                            style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                            placeholder="Votre nom"
+                            placeholderTextColor={
+                              isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                            }
+                            value={nom}
+                            onChangeText={setNom}
+                            editable={!loading}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                          Prénom
+                        </Text>
+                        <View
+                          style={[
+                            styles.inputWrapper,
+                            isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                          ]}
+                        >
+                          <Feather
+                            name="user"
+                            size={20}
+                            color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                            style={styles.inputIcon}
+                          />
+                          <TextInput
+                            style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                            placeholder="Votre prénom"
+                            placeholderTextColor={
+                              isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                            }
+                            value={prenom}
+                            onChangeText={setPrenom}
+                            editable={!loading}
+                          />
+                        </View>
+                      </View>
+                    </>
+                  )}
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                      Matricule
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputWrapper,
+                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                      ]}
+                    >
+                      <Feather
+                        name="hash"
+                        size={20}
+                        color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                        placeholder="5 chiffres"
+                        placeholderTextColor={
+                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                        }
+                        value={matricule}
+                        onChangeText={setMatricule}
+                        keyboardType="number-pad"
+                        maxLength={5}
+                        editable={!loading}
+                      />
+                    </View>
+                  </View>
+
+                  {action === "Sign up" && (
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                        Email
+                      </Text>
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                        ]}
+                      >
+                        <Feather
+                          name="mail"
+                          size={20}
+                          color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                          placeholder="Votre email professionnel"
+                          placeholderTextColor={
+                            isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                          }
+                          value={email}
+                          onChangeText={setEmail}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          editable={!loading}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                      Mot de passe
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputWrapper,
+                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                      ]}
+                    >
+                      <Feather
+                        name="lock"
+                        size={20}
+                        color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                        placeholder="Votre mot de passe"
+                        placeholderTextColor={
+                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                        }
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                        editable={!loading}
+                      />
+                    </View>
+                  </View>
+
+                  {action === "Sign up" && (
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                        Confirmer le mot de passe
+                      </Text>
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
+                        ]}
+                      >
+                        <Feather
+                          name="lock"
+                          size={20}
+                          color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                          placeholder="Confirmez votre mot de passe"
+                          placeholderTextColor={
+                            isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
+                          }
+                          value={confirmPassword}
+                          onChangeText={setConfirmPassword}
+                          secureTextEntry
+                          editable={!loading}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {loginError?.response?.data?.error === "Account locked" && (
+                    <View style={styles.blockedMessage}>
+                      <Feather name="lock" size={24} color="#F44336" style={styles.blockedIcon} />
+                      <Text style={styles.blockedText}>
+                        {loginError.response.data.message || "Compte bloqué. Veuillez réessayer plus tard."}
+                      </Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                    onPress={action === "Login" ? handleLogin : handleSignUp}
+                    disabled={loading || (action === "Sign up" && (!nom || !prenom))}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.submitButtonGradient}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <View style={styles.submitButtonContent}>
+                          <Feather
+                            name={action === "Login" ? "log-in" : "user-plus"}
+                            size={20}
+                            color="white"
+                            style={styles.submitButtonIcon}
+                          />
+                          <Text style={styles.submitButtonText}>
+                            {action === "Login" ? "Se connecter" : "S'inscrire"}
+                          </Text>
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  {action === "Login" && (
+                    <TouchableOpacity
+                      style={styles.forgotPasswordButton}
+                      onPress={() => setShowResetPassword(true)}
+                      disabled={loading}
+                    >
+                      <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <View style={styles.footer}>
+                  <Text
+                    style={[
+                      styles.footerText,
+                      isDark ? styles.textLightSecondary : styles.textDarkSecondary,
+                    ]}
+                  >
+                    {action === "Login" ? "Portail RH" : ""}
                   </Text>
                 </View>
-              )}
-
-              {action === "Sign up" && (
-                <>
-                  <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                      Nom
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                      ]}
-                    >
-                      <Feather
-                        name="user"
-                        size={20}
-                        color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
-                        style={styles.inputIcon}
-                      />
-                      <TextInput
-                        style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-                        placeholder="Votre nom"
-                        placeholderTextColor={
-                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                        }
-                        value={nom}
-                        onChangeText={setNom}
-                        editable={!loading}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                      Prénom
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                      ]}
-                    >
-                      <Feather
-                        name="user"
-                        size={20}
-                        color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
-                        style={styles.inputIcon}
-                      />
-                      <TextInput
-                        style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-                        placeholder="Votre prénom"
-                        placeholderTextColor={
-                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                        }
-                        value={prenom}
-                        onChangeText={setPrenom}
-                        editable={!loading}
-                      />
-                    </View>
-                  </View>
-                </>
-              )}
-
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                  Matricule
+              </>
+            ) : (
+              <View style={styles.resetPasswordContainer}>
+                <Text style={[styles.resetPasswordTitle, isDark ? styles.textLight : styles.textDark]}>
+                  Réinitialiser le mot de passe
                 </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                  ]}
-                >
-                  <Feather
-                    name="hash"
-                    size={20}
-                    color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-                    placeholder="5 chiffres"
-                    placeholderTextColor={
-                      isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                    }
-                    value={matricule}
-                    onChangeText={setMatricule}
-                    keyboardType="number-pad"
-                    maxLength={5}
-                    editable={!loading}
-                  />
-                </View>
-              </View>
+                <Text style={[styles.resetPasswordSubtitle, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                  Entrez votre email professionnel pour recevoir un lien de réinitialisation
+                </Text>
 
-              {action === "Sign up" && (
                 <View style={styles.inputGroup}>
                   <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                    Email
+                    Email professionnel
                   </Text>
                   <View
                     style={[
@@ -598,119 +750,57 @@ const Authentication = () => {
                       placeholderTextColor={
                         isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
                       }
-                      value={email}
-                      onChangeText={setEmail}
+                      value={resetEmail}
+                      onChangeText={setResetEmail}
                       keyboardType="email-address"
                       autoCapitalize="none"
                       editable={!loading}
                     />
                   </View>
                 </View>
-              )}
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                  Mot de passe
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                  ]}
-                >
-                  <Feather
-                    name="lock"
-                    size={20}
-                    color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-                    placeholder="Votre mot de passe"
-                    placeholderTextColor={
-                      isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                    }
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                    editable={!loading}
-                  />
+                <View style={styles.resetPasswordButtons}>
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, { marginRight: 10 }]}
+                    onPress={() => {
+                      setShowResetPassword(false);
+                      setResetEmail("");
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={styles.secondaryButtonText}>Annuler</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.submitButton}
+                    onPress={handleRequestPasswordReset}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.submitButtonGradient}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <View style={styles.submitButtonContent}>
+                          <Feather
+                            name="send"
+                            size={20}
+                            color="white"
+                            style={styles.submitButtonIcon}
+                          />
+                          <Text style={styles.submitButtonText}>Envoyer</Text>
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
                 </View>
               </View>
-
-              {action === "Sign up" && (
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                    Confirmer le mot de passe
-                  </Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                    ]}
-                  >
-                    <Feather
-                      name="lock"
-                      size={20}
-                      color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-                      placeholder="Confirmez votre mot de passe"
-                      placeholderTextColor={
-                        isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                      }
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      secureTextEntry
-                      editable={!loading}
-                    />
-                  </View>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-                onPress={action === "Login" ? handleLogin : handleSignUp}
-                disabled={loading || (action === "Sign up" && (!nom || !prenom))}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.submitButtonGradient}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="white" />
-                  ) : (
-                    <View style={styles.submitButtonContent}>
-                      <Feather
-                        name={action === "Login" ? "log-in" : "user-plus"}
-                        size={20}
-                        color="white"
-                        style={styles.submitButtonIcon}
-                      />
-                      <Text style={styles.submitButtonText}>
-                        {action === "Login" ? "Se connecter" : "S'inscrire"}
-                      </Text>
-                    </View>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.footer}>
-              <Text
-                style={[
-                  styles.footerText,
-                  isDark ? styles.textLightSecondary : styles.textDarkSecondary,
-                ]}
-              >
-                {action === "Login" ? "Portail RH" : ""}
-              </Text>
-            </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -918,6 +1008,43 @@ const styles = StyleSheet.create({
     color: "#F44336",
     flex: 1,
     fontWeight: "500",
+  },
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+    marginTop: 8,
+  },
+  forgotPasswordText: {
+    color: "#384bf8",
+    fontSize: 14,
+  },
+  resetPasswordContainer: {
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 8,
+  },
+  resetPasswordTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  resetPasswordSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  resetPasswordButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 16,
+  },
+  secondaryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  secondaryButtonText: {
+    color: "#384bf8",
+    fontWeight: "600",
   },
 });
 

@@ -26,208 +26,128 @@ const useApiPooling = <T,>({
   const [data, setData] = useState<T | null>(initialData)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<Error | null>(null)
-  const [isUserAuthenticated, setIsUserAuthenticated] = useState<boolean>(false)
-
-  // Référence pour suivre si une requête est en cours
+  
+  // Refs for tracking state
   const isFetchingRef = useRef<boolean>(false)
-  // Référence pour suivre si les données ont été chargées depuis le cache
-  const cacheLoadedRef = useRef<boolean>(false)
-  // Référence pour suivre si les données ont été chargées depuis l'API
-  const apiLoadedRef = useRef<boolean>(false)
-  // Référence pour le dernier temps de mise à jour
-  const lastUpdateRef = useRef<number>(0)
-
-  // Use refs to prevent infinite loops
-  const isInitialMount = useRef(true)
-  const apiCallRef = useRef(apiCall)
-  const storageKeyRef = useRef(storageKey)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const isMountedRef = useRef<boolean>(true)
 
-  // Update refs when props change
-  useEffect(() => {
-    apiCallRef.current = apiCall
-    storageKeyRef.current = storageKey
-  }, [apiCall, storageKey])
+  // Enhanced fetch function with error handling
+  const fetchData = useCallback(async (forceRefresh = false): Promise<void> => {
+    if (isFetchingRef.current) return
+    isFetchingRef.current = true
 
-  // Vérifier si l'utilisateur est authentifié
-  const checkAuthentication = useCallback(async () => {
     try {
-      const userInfo = await AsyncStorage.getItem("userInfo")
-      const userToken = await AsyncStorage.getItem("userToken")
-      const userId = await AsyncStorage.getItem("userId")
-
-      const isAuthenticated = !!(userInfo && userToken && userId)
-      setIsUserAuthenticated(isAuthenticated)
-      return isAuthenticated
-    } catch (error) {
-      console.error("Erreur lors de la vérification de l'authentification:", error)
-      return false
-    }
-  }, [])
-
-  // Charger les données depuis le cache
-  const loadFromCache = useCallback(async (): Promise<boolean> => {
-    try {
-      if (cacheLoadedRef.current) return true // Éviter de charger le cache plusieurs fois
-
-      const cachedData = await AsyncStorage.getItem(storageKeyRef.current)
-      if (cachedData) {
-        const parsedData = JSON.parse(cachedData)
-        console.log(`Loaded cached data for ${storageKeyRef.current}`)
-        setData(parsedData)
-        cacheLoadedRef.current = true
-        return true
-      }
-      return false
-    } catch (cacheError) {
-      console.error("Error loading from cache:", cacheError)
-      return false
-    }
-  }, [])
-
-  // Fonction pour récupérer les données avec debounce
-  const fetchData = useCallback(
-    async (forceRefresh = false): Promise<void> => {
-      // Éviter les appels simultanés
-      if (isFetchingRef.current) {
-        console.log("Une requête est déjà en cours, ignorée")
-        return
-      }
-
-      // Vérifier le temps écoulé depuis la dernière mise à jour (debounce)
-      const now = Date.now()
-      if (!forceRefresh && now - lastUpdateRef.current < 5000) {
-        // 5 secondes de debounce
-        console.log("Dernière mise à jour trop récente, ignorée")
-        return
-      }
-
-      try {
-        // Si l'API dépend de l'authentification, vérifier d'abord si l'utilisateur est authentifié
-        if (dependsOnAuth) {
-          const isAuthenticated = await checkAuthentication()
-          if (!isAuthenticated) {
-            console.log("L'utilisateur n'est pas authentifié, impossible de faire l'appel API")
-            setLoading(false)
-            return
-          }
-        }
-
-        // Marquer comme en cours de chargement seulement si c'est le premier chargement
-        if (!apiLoadedRef.current && !forceRefresh) {
-          setLoading(true)
-        }
-
-        // Essayer d'abord de charger depuis le cache si ce n'est pas un rafraîchissement forcé
-        if (!forceRefresh) {
-          const cacheLoaded = await loadFromCache()
-          if (cacheLoaded) {
-            setLoading(false)
-          }
-        }
-
-        // Marquer comme en cours de récupération
-        isFetchingRef.current = true
-
-        // Faire l'appel API
-        try {
-          const freshData = await apiCallRef.current()
-          console.log(`Received fresh data for ${storageKeyRef.current}`)
-
-          // Mettre à jour les données seulement si elles sont différentes
-          const currentDataStr = data ? JSON.stringify(data) : ""
-          const newDataStr = JSON.stringify(freshData)
-
-          if (currentDataStr !== newDataStr) {
-            setData(freshData)
-            await AsyncStorage.setItem(storageKeyRef.current, newDataStr)
-          }
-
-          setError(null)
-          apiLoadedRef.current = true
-          lastUpdateRef.current = Date.now()
-        } catch (apiError) {
-          console.error("API call failed:", apiError)
-          // Only set error if we don't have data yet
-          if (!data) {
-            setError(apiError instanceof Error ? apiError : new Error(String(apiError)))
-          }
-        } finally {
-          isFetchingRef.current = false
-          setLoading(false)
-        }
-      } catch (err) {
-        console.error("Fetch data error:", err)
-        if (!data) {
-          setError(err instanceof Error ? err : new Error("An unknown error occurred"))
-        }
-        isFetchingRef.current = false
-        setLoading(false)
-      }
-    },
-    [checkAuthentication, data, dependsOnAuth, loadFromCache],
-  )
-
-  // Configurer l'intervalle de polling
-  const setupPolling = useCallback(() => {
-    // Nettoyer l'intervalle existant s'il y en a un
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-    }
-
-    // Créer un nouvel intervalle avec une fréquence plus basse pour éviter les problèmes
-    intervalRef.current = setInterval(
-      () => {
-        fetchData()
-      },
-      Math.max(poolingInterval, 60000),
-    ) // Au moins 1 minute entre les appels
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-    }
-  }, [fetchData, poolingInterval])
-
-  // Initialiser le hook
-  useEffect(() => {
-    const initializeHook = async () => {
-      // Charger d'abord depuis le cache
-      await loadFromCache()
-
-      // Si l'API dépend de l'authentification, vérifier d'abord si l'utilisateur est authentifié
+      // Check authentication if needed
       if (dependsOnAuth) {
-        const isAuthenticated = await checkAuthentication()
-        if (!isAuthenticated) {
-          console.log("L'utilisateur n'est pas authentifié, en attente...")
-          setLoading(false)
+        const token = await AsyncStorage.getItem("userToken")
+        if (!token) {
+          if (isMountedRef.current) {
+            setError(new Error("Authentication required"))
+            setLoading(false)
+          }
           return
         }
       }
 
-      // Charger les données initiales
+      // Show loading only if it's initial load or forced refresh
+      if (!data || forceRefresh) {
+        if (isMountedRef.current) setLoading(true)
+      }
+
+      // Try to get fresh data
+      try {
+        const freshData = await apiCall()
+        
+        // Only update if component is still mounted
+        if (isMountedRef.current) {
+          setData(freshData)
+          setError(null)
+          
+          // Cache the data
+          try {
+            await AsyncStorage.setItem(storageKey, JSON.stringify(freshData))
+          } catch (cacheError) {
+            console.error("Failed to cache data:", cacheError)
+          }
+        }
+      } catch (apiError) {
+        console.error("API call failed:", apiError)
+        
+        // Try to use cached data if available
+        try {
+          const cachedData = await AsyncStorage.getItem(storageKey)
+          if (cachedData) {
+            const parsedData = JSON.parse(cachedData)
+            if (isMountedRef.current) {
+              setData(parsedData)
+              setError(null)
+            }
+          } else {
+            throw apiError // No cached data available
+          }
+        } catch (parseError) {
+          console.error("Failed to parse cached data:", parseError)
+          if (isMountedRef.current) {
+            setError(apiError instanceof Error ? apiError : new Error(String(apiError)))
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Fetch error:", err)
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error(String(err)))
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      isFetchingRef.current = false
+    }
+  }, [apiCall, storageKey, dependsOnAuth, data])
+
+  // Initialize hook
+  useEffect(() => {
+    isMountedRef.current = true
+
+    // Load initial data
+    const initialize = async () => {
+      // First try to load from cache
+      try {
+        const cachedData = await AsyncStorage.getItem(storageKey)
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData)
+          if (isMountedRef.current) {
+            setData(parsedData)
+          }
+        }
+      } catch (cacheError) {
+        console.error("Failed to load from cache:", cacheError)
+      }
+
+      // Then fetch fresh data
       await fetchData()
 
-      // Configurer l'intervalle de polling
-      return setupPolling()
+      // Setup polling interval
+      intervalRef.current = setInterval(() => {
+        fetchData()
+      }, Math.max(poolingInterval, 30000)) // Minimum 30 seconds between calls
     }
 
-    const cleanup = initializeHook()
+    initialize()
+
     return () => {
-      if (typeof cleanup === "function") {
-        cleanup()
+      isMountedRef.current = false
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
       }
     }
-  }, [dependsOnAuth, checkAuthentication, setupPolling, fetchData, loadFromCache])
+  }, [fetchData, poolingInterval, storageKey])
 
-  // Fonction de rafraîchissement exposée
-  const refresh = useCallback(
-    async (force = false) => {
-      await fetchData(force)
-    },
-    [fetchData],
-  )
+  // Refresh function
+  const refresh = useCallback(async (force = false) => {
+    await fetchData(force)
+  }, [fetchData])
 
   return {
     data,
