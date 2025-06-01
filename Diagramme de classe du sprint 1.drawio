@@ -27,9 +27,6 @@
         <mxCell id="2p8dS12ZbN8FqSJUtTzd-26" value="+ConsulterTableauDeBord" style="text;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" parent="2p8dS12ZbN8FqSJUtTzd-14" vertex="1">
           <mxGeometry y="502" width="230" height="24" as="geometry" />
         </mxCell>
-        <mxCell id="2p8dS12ZbN8FqSJUtTzd-27" value="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="WIyWlLk6GJQsqaUBKTNV-1" vertex="1" connectable="0">
-          <mxGeometry x="401.8230158194874" y="1184.8144246136662" as="geometry" />
-        </mxCell>
         <mxCell id="2p8dS12ZbN8FqSJUtTzd-28" value="Succursale_Société" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" parent="WIyWlLk6GJQsqaUBKTNV-1" vertex="1">
           <mxGeometry x="70" y="450" width="180" height="192" as="geometry" />
         </mxCell>
