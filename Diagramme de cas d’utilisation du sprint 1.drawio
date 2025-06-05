@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36" version="27.1.1">
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36" version="27.1.1">
   <diagram name="Page-1" id="dhfYt4_4K2asHggdhG7o">
-    <mxGraphModel dx="2377" dy="1295" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1426" dy="777" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -40,7 +40,7 @@
             <mxPoint x="440" y="440" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="Rih5JcGtAL07y-yQntJl-12" value="" style="endArrow=classic;dashed=1;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;endFill=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;fontSize=14;" parent="1" source="Rih5JcGtAL07y-yQntJl-8" target="Rih5JcGtAL07y-yQntJl-5" edge="1">
+        <mxCell id="Rih5JcGtAL07y-yQntJl-12" value="" style="endArrow=classic;dashed=1;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;endFill=1;fontSize=14;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="Rih5JcGtAL07y-yQntJl-5" target="Rih5JcGtAL07y-yQntJl-8" edge="1">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="435" y="250" as="sourcePoint" />
             <mxPoint x="485" y="200" as="targetPoint" />
@@ -288,19 +288,19 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-19" value="" style="strokeWidth=2;html=1;shape=mxgraph.flowchart.annotation_1;align=left;pointerEvents=1;" vertex="1" parent="1">
+        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-19" value="" style="strokeWidth=2;html=1;shape=mxgraph.flowchart.annotation_1;align=left;pointerEvents=1;" parent="1" vertex="1">
           <mxGeometry x="700" y="631" width="50" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-20" value="" style="endArrow=block;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;endFill=0;exitPerimeter=0;" edge="1" parent="1" source="G7sNvWDKq_sHJ-qRfsIr-19" target="GwHrn4Rqxsi3p8oEAaRo-5">
+        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-20" value="" style="endArrow=block;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;endFill=0;exitPerimeter=0;" parent="1" source="G7sNvWDKq_sHJ-qRfsIr-19" target="GwHrn4Rqxsi3p8oEAaRo-5" edge="1">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="600" y="720" as="sourcePoint" />
             <mxPoint x="650" y="670" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-21" value="Ajourter un service par nom" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-21" value="Ajourter un service par nom" style="ellipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="750" y="600" width="90" height="59" as="geometry" />
         </mxCell>
-        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-22" value="Ajouter un service par nom et chefs de service" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="G7sNvWDKq_sHJ-qRfsIr-22" value="Ajouter un service par nom et chefs de service" style="ellipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="750" y="696" width="100" height="70" as="geometry" />
         </mxCell>
       </root>
