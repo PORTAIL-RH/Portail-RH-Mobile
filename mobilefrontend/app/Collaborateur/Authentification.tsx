@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,19 +6,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  Animated,
-  PanResponder,
   StatusBar,
   Platform,
   KeyboardAvoidingView,
   ScrollView,
   SafeAreaView,
   Image,
+  ActivityIndicator,
+  
 } from "react-native";
 import axios from "axios";
 import { AxiosError } from 'axios';
-import { ActivityIndicator } from 'react-native';
-
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,14 +24,15 @@ import Toast from "react-native-toast-message";
 import { API_CONFIG } from "../config/apiConfig";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
+import * as Linking from 'expo-linking';
 
 // Define the navigation stack types
 type AuthentificationStackParamList = {
   Authentification: undefined;
   AccueilCollaborateur: undefined;
+  ResetPassword: { token?: string };
 };
 
-// Define the navigation prop type
 type AuthentificationNavigationProp = NativeStackNavigationProp<
   AuthentificationStackParamList,
   "Authentification"
@@ -56,76 +55,11 @@ const storeAuthData = async (data: any) => {
   }
 };
 
-const getAuthData = async () => {
-  try {
-    const data = await AsyncStorage.getItem("authData");
-    return data ? JSON.parse(data) : null;
-  } catch (error) {
-    console.error("Error retrieving auth data:", error);
-    return null;
-  }
-};
-
-// Mouse/Touch Effect Background Component
-const BackgroundWithMouseEffect = ({ theme }: { theme: string }) => {
-  const [dimensions, setDimensions] = useState({
-    width: Dimensions.get("window").width,
-    height: Dimensions.get("window").height,
-  });
-
-  // Animation value for the glow effect
-  const animatedPosition = useRef(
-    new Animated.ValueXY({
-      x: dimensions.width / 2,
-      y: dimensions.height / 2,
-    })
-  ).current;
-
-  // Update dimensions on orientation change
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener("change", ({ window }) => {
-      setDimensions({ width: window.width, height: window.height });
-    });
-
-    return () => subscription.remove();
-  }, []);
-
-  // Create pan responder to track touch position
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderMove: (event, gestureState) => {
-      Animated.spring(animatedPosition, {
-        toValue: { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY },
-        useNativeDriver: false,
-        friction: 5,
-      }).start();
-    },
-  });
-
-  const isDark = theme === "dark";
-
-  return (
-    <View style={styles.backgroundContainer}>
-      <LinearGradient
-        colors={
-          isDark
-            ? ["#1a1f38", "#2d3a65", "#1a1f38"]
-            : ["#f0f4f8", "#e2eaf2", "#f0f4f8"]
-        }
-        start={{ x: 0.1, y: 0.1 }}
-        end={{ x: 0.9, y: 0.9 }}
-        style={styles.backgroundGradient}
-      />
-    </View>
-  );
-};
-
 const Authentication = () => {
   const navigation = useNavigation<AuthentificationNavigationProp>();
   const [action, setAction] = useState<"Login" | "Sign up">("Login");
-  const [nom, setNom] = useState(""); // Last name
-  const [prenom, setPrenom] = useState(""); // First name
+  const [nom, setNom] = useState("");
+  const [prenom, setPrenom] = useState("");
   const [email, setEmail] = useState("");
   const [matricule, setMatricule] = useState("");
   const [password, setPassword] = useState("");
@@ -138,30 +72,43 @@ const Authentication = () => {
   const [blockExpiration, setBlockExpiration] = useState<number | null>(null);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
-  // Initialize theme from AsyncStorage
+  // Initialize theme and check for deep links
   useEffect(() => {
-    const loadTheme = async () => {
+    const init = async () => {
       try {
         const savedTheme = await AsyncStorage.getItem("theme");
-        if (savedTheme) {
-          setTheme(savedTheme);
-        }
+        if (savedTheme) setTheme(savedTheme);
+
+        // Check for deep link on app start
+        const url = await Linking.getInitialURL();
+        if (url) handleDeepLink({ url });
       } catch (error) {
-        console.error("Error loading theme:", error);
+        console.error("Initialization error:", error);
       }
     };
 
-    loadTheme();
+    init();
+
+    // Listen for deep links when app is running
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    return () => subscription.remove();
   }, []);
 
-  // Toggle theme function
+  const handleDeepLink = useCallback(({ url }: { url: string }) => {
+    const { path, queryParams } = Linking.parse(url);
+    if (path === 'reset-password' && queryParams?.token) {
+      setResetToken(queryParams.token as string);
+      setShowResetPassword(true);
+    }
+  }, []);
+
   const toggleTheme = async () => {
     const newTheme = theme === "dark" ? "light" : "dark";
     setTheme(newTheme);
     try {
       await AsyncStorage.setItem("theme", newTheme);
-      await AsyncStorage.setItem("@theme_mode", newTheme);
     } catch (error) {
       console.error("Error saving theme:", error);
     }
@@ -211,11 +158,7 @@ const Authentication = () => {
       );
 
       if (response.status === 200) {
-        showToast(
-          "success",
-          "Enregistrement réussi! Votre compte est en attente d'activation."
-        );
-
+        showToast("success", "Enregistrement réussi! Votre compte est en attente d'activation.");
         setNom("");
         setPrenom("");
         setMatricule("");
@@ -223,9 +166,7 @@ const Authentication = () => {
         setPassword("");
         setConfirmPassword("");
 
-        setTimeout(() => {
-          setAction("Login");
-        }, 3000);
+        setTimeout(() => setAction("Login"), 3000);
       }
     } catch (error) {
       console.error("Error signing up:", error);
@@ -235,38 +176,6 @@ const Authentication = () => {
     }
   };
 
-  useEffect(() => {
-    const checkBlockStatus = async () => {
-      try {
-        const blockedUntil = await AsyncStorage.getItem("blockedUntil");
-        if (blockedUntil) {
-          const expirationTime = Number.parseInt(blockedUntil, 10);
-          if (expirationTime > Date.now()) {
-            setIsBlocked(true);
-            setBlockExpiration(expirationTime);
-            const timeRemaining = expirationTime - Date.now();
-            setTimeout(() => {
-              setIsBlocked(false);
-              setFailedAttempts(0);
-              AsyncStorage.removeItem("blockedUntil");
-            }, timeRemaining);
-          } else {
-            AsyncStorage.removeItem("blockedUntil");
-          }
-        }
-
-        const attempts = await AsyncStorage.getItem("failedAttempts");
-        if (attempts) {
-          setFailedAttempts(Number.parseInt(attempts, 10));
-        }
-      } catch (error) {
-        console.error("Error checking block status:", error);
-      }
-    };
-
-    checkBlockStatus();
-  }, []);
-  
   const handleLogin = async () => {
     if (!matricule || !password) {
       showToast("error", "Matricule et mot de passe sont obligatoires");
@@ -275,29 +184,24 @@ const Authentication = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`, {
-        matricule,
-        password
-      });
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/login`, 
+        { matricule, password }
+      );
 
       if (response.status === 200) {
         const { token, user } = response.data;
         
-        // Block admin users from connecting
         if (user.role === "admin") {
           showToast("error", "Les administrateurs ne sont pas autorisés à se connecter via l'application mobile.");
-          setLoading(false);
           return;
         }
 
-        // Allow RH, Chef Hiérarchique, and collaborateur
         if (!["RH", "Chef Hiérarchique", "collaborateur"].includes(user.role)) {
           showToast("error", "Rôle non autorisé pour l'application mobile.");
-          setLoading(false);
           return;
         }
 
-        // Store all user information
         await AsyncStorage.multiSet([
           ["userToken", token],
           ["userId", user.id],
@@ -308,23 +212,14 @@ const Authentication = () => {
         ]);
 
         showToast("success", "Connexion réussie!");
-
-        setTimeout(() => {
-          navigation.navigate("AccueilCollaborateur");
-        }, 2000);
+        setTimeout(() => navigation.navigate("AccueilCollaborateur"), 2000);
       }
     } catch (err: unknown) {
       const error = err as AxiosError<any>;
       setLoginError(error);
-    
       console.error("Error logging in:", error);
-    
+      
       if (error.response) {
-        if (error.response.data?.error === "Account locked") {
-          showToast("error", error.response.data.message || "Compte bloqué. Veuillez réessayer plus tard.");
-          return;
-        }
-    
         showToast("error", error.response.data?.message || "Identifiants incorrects");
       } else {
         showToast("error", "Erreur de connexion");
@@ -333,7 +228,7 @@ const Authentication = () => {
       setLoading(false);
     }
   };
-  
+
   const handleRequestPasswordReset = async () => {
     if (!resetEmail) {
       showToast("error", "Veuillez entrer votre email");
@@ -343,15 +238,12 @@ const Authentication = () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/request-password-reset`,
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/request-password-reset-mobile`,
         { email: resetEmail }
       );
 
       if (response.status === 200) {
-        showToast(
-          "success",
-          "Si un compte existe avec cet email, un lien de réinitialisation a été envoyé"
-        );
+        showToast("success", "Si un compte existe avec cet email, un lien de réinitialisation a été envoyé");
         setShowResetPassword(false);
         setResetEmail("");
       }
@@ -363,15 +255,37 @@ const Authentication = () => {
     }
   };
 
+  const handlePasswordReset = async (newPassword: string) => {
+    if (!resetToken) return;
+
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/Personnel/reset-password`,
+        {
+          token: resetToken,
+          newPassword,
+          confirmPassword: newPassword
+        }
+      );
+
+      if (response.status === 200) {
+        showToast("success", "Mot de passe réinitialisé avec succès");
+        setResetToken(null);
+        setShowResetPassword(false);
+      }
+    } catch (error) {
+      showToast("error", "Échec de la réinitialisation du mot de passe");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isDark = theme === "dark";
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, isDark ? styles.darkBackground : styles.lightBackground]}
-    >
+    <SafeAreaView style={[styles.safeArea, isDark ? styles.darkBackground : styles.lightBackground]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-
-      <BackgroundWithMouseEffect theme={theme} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -382,10 +296,7 @@ const Authentication = () => {
           keyboardShouldPersistTaps="handled"
         >
           <TouchableOpacity
-            style={[
-              styles.themeToggle,
-              isDark ? styles.themeToggleDark : styles.themeToggleLight,
-            ]}
+            style={[styles.themeToggle, isDark ? styles.themeToggleDark : styles.themeToggleLight]}
             onPress={toggleTheme}
             activeOpacity={0.7}
           >
@@ -408,22 +319,11 @@ const Authentication = () => {
             {!showResetPassword ? (
               <>
                 <View style={styles.header}>
-                  <Text
-                    style={[
-                      styles.headerTitle,
-                      isDark ? styles.textLight : styles.textDark,
-                      styles.gradientText,
-                    ]}
-                  >
+                  <Text style={[styles.headerTitle, isDark ? styles.textLight : styles.textDark]}>
                     {action === "Login" ? "Connexion au portail RH" : "Créer un compte"}
                   </Text>
 
-                  <Text
-                    style={[
-                      styles.headerSubtitle,
-                      isDark ? styles.textLightSecondary : styles.textDarkSecondary,
-                    ]}
-                  >
+                  <Text style={[styles.headerSubtitle, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
                     {action === "Login"
                       ? "Entrez vos identifiants pour accéder à votre espace personnel"
                       : "Remplissez le formulaire pour créer votre compte"}
@@ -449,39 +349,11 @@ const Authentication = () => {
                 </View>
 
                 <View style={styles.formContainer}>
-                  {isBlocked && (
-                    <View style={styles.blockedMessage}>
-                      <Feather
-                        name="lock"
-                        size={24}
-                        color="#F44336"
-                        style={styles.blockedIcon}
-                      />
-                      <Text style={styles.blockedText}>
-                        Compte bloqué après 3 tentatives échouées.
-                        {blockExpiration && (
-                          <Text>
-                            {"\n"}Réessayez dans{" "}
-                            {Math.ceil((blockExpiration - Date.now()) / 60000)}{" "}
-                            minutes.
-                          </Text>
-                        )}
-                      </Text>
-                    </View>
-                  )}
-
                   {action === "Sign up" && (
                     <>
                       <View style={styles.inputGroup}>
-                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                          Nom
-                        </Text>
-                        <View
-                          style={[
-                            styles.inputWrapper,
-                            isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                          ]}
-                        >
+                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Nom</Text>
+                        <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                           <Feather
                             name="user"
                             size={20}
@@ -491,9 +363,7 @@ const Authentication = () => {
                           <TextInput
                             style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                             placeholder="Votre nom"
-                            placeholderTextColor={
-                              isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                            }
+                            placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
                             value={nom}
                             onChangeText={setNom}
                             editable={!loading}
@@ -502,15 +372,8 @@ const Authentication = () => {
                       </View>
 
                       <View style={styles.inputGroup}>
-                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                          Prénom
-                        </Text>
-                        <View
-                          style={[
-                            styles.inputWrapper,
-                            isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                          ]}
-                        >
+                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Prénom</Text>
+                        <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                           <Feather
                             name="user"
                             size={20}
@@ -520,9 +383,7 @@ const Authentication = () => {
                           <TextInput
                             style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                             placeholder="Votre prénom"
-                            placeholderTextColor={
-                              isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                            }
+                            placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
                             value={prenom}
                             onChangeText={setPrenom}
                             editable={!loading}
@@ -533,15 +394,8 @@ const Authentication = () => {
                   )}
 
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                      Matricule
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                      ]}
-                    >
+                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Matricule</Text>
+                    <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                       <Feather
                         name="hash"
                         size={20}
@@ -551,9 +405,7 @@ const Authentication = () => {
                       <TextInput
                         style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                         placeholder="5 chiffres"
-                        placeholderTextColor={
-                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                        }
+                        placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
                         value={matricule}
                         onChangeText={setMatricule}
                         keyboardType="number-pad"
@@ -565,15 +417,8 @@ const Authentication = () => {
 
                   {action === "Sign up" && (
                     <View style={styles.inputGroup}>
-                      <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                        Email
-                      </Text>
-                      <View
-                        style={[
-                          styles.inputWrapper,
-                          isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                        ]}
-                      >
+                      <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Email</Text>
+                      <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                         <Feather
                           name="mail"
                           size={20}
@@ -583,9 +428,7 @@ const Authentication = () => {
                         <TextInput
                           style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                           placeholder="Votre email professionnel"
-                          placeholderTextColor={
-                            isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                          }
+                          placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
                           value={email}
                           onChangeText={setEmail}
                           keyboardType="email-address"
@@ -597,15 +440,8 @@ const Authentication = () => {
                   )}
 
                   <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                      Mot de passe
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                      ]}
-                    >
+                    <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>Mot de passe</Text>
+                    <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                       <Feather
                         name="lock"
                         size={20}
@@ -615,9 +451,7 @@ const Authentication = () => {
                       <TextInput
                         style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                         placeholder="Votre mot de passe"
-                        placeholderTextColor={
-                          isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                        }
+                        placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry
@@ -631,12 +465,7 @@ const Authentication = () => {
                       <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
                         Confirmer le mot de passe
                       </Text>
-                      <View
-                        style={[
-                          styles.inputWrapper,
-                          isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                        ]}
-                      >
+                      <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                         <Feather
                           name="lock"
                           size={20}
@@ -646,24 +475,13 @@ const Authentication = () => {
                         <TextInput
                           style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
                           placeholder="Confirmez votre mot de passe"
-                          placeholderTextColor={
-                            isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                          }
+                          placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
                           value={confirmPassword}
                           onChangeText={setConfirmPassword}
                           secureTextEntry
                           editable={!loading}
                         />
                       </View>
-                    </View>
-                  )}
-
-                  {loginError?.response?.data?.error === "Account locked" && (
-                    <View style={styles.blockedMessage}>
-                      <Feather name="lock" size={24} color="#F44336" style={styles.blockedIcon} />
-                      <Text style={styles.blockedText}>
-                        {loginError.response.data.message || "Compte bloqué. Veuillez réessayer plus tard."}
-                      </Text>
                     </View>
                   )}
 
@@ -703,101 +521,144 @@ const Authentication = () => {
                       onPress={() => setShowResetPassword(true)}
                       disabled={loading}
                     >
-                      <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                      <Text style={[styles.forgotPasswordText, isDark ? styles.linkTextDark : styles.linkTextLight]}>
+                        Mot de passe oublié ?
+                      </Text>
                     </TouchableOpacity>
                   )}
-                </View>
-
-                <View style={styles.footer}>
-                  <Text
-                    style={[
-                      styles.footerText,
-                      isDark ? styles.textLightSecondary : styles.textDarkSecondary,
-                    ]}
-                  >
-                    {action === "Login" ? "Portail RH" : ""}
-                  </Text>
                 </View>
               </>
             ) : (
               <View style={styles.resetPasswordContainer}>
-                <Text style={[styles.resetPasswordTitle, isDark ? styles.textLight : styles.textDark]}>
-                  Réinitialiser le mot de passe
-                </Text>
-                <Text style={[styles.resetPasswordSubtitle, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
-                  Entrez votre email professionnel pour recevoir un lien de réinitialisation
-                </Text>
-
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
-                    Email professionnel
-                  </Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      isDark ? styles.inputWrapperDark : styles.inputWrapperLight,
-                    ]}
-                  >
-                    <Feather
-                      name="mail"
-                      size={20}
-                      color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-                      placeholder="Votre email professionnel"
-                      placeholderTextColor={
-                        isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"
-                      }
-                      value={resetEmail}
-                      onChangeText={setResetEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      editable={!loading}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.resetPasswordButtons}>
+                <View style={styles.resetPasswordHeader}>
                   <TouchableOpacity
-                    style={[styles.secondaryButton, { marginRight: 10 }]}
+                    style={styles.backButton}
                     onPress={() => {
                       setShowResetPassword(false);
                       setResetEmail("");
+                      setResetToken(null);
                     }}
                     disabled={loading}
                   >
-                    <Text style={styles.secondaryButtonText}>Annuler</Text>
+                    <Feather
+                      name="arrow-left"
+                      size={24}
+                      color={isDark ? "rgba(255, 255, 255, 0.8)" : "rgba(26, 31, 56, 0.8)"}
+                    />
                   </TouchableOpacity>
+                  <Text style={[styles.resetPasswordTitle, isDark ? styles.textLight : styles.textDark]}>
+                    {resetToken ? "Nouveau mot de passe" : "Réinitialiser le mot de passe"}
+                  </Text>
+                </View>
 
-                  <TouchableOpacity
-                    style={styles.submitButton}
-                    onPress={handleRequestPasswordReset}
-                    disabled={loading}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.submitButtonGradient}
-                    >
-                      {loading ? (
-                        <ActivityIndicator color="white" />
-                      ) : (
-                        <View style={styles.submitButtonContent}>
+                <View style={styles.resetPasswordContent}>
+                  <View style={[styles.resetPasswordIconContainer, isDark ? styles.resetPasswordIconContainerDark : styles.resetPasswordIconContainerLight]}>
+                    <Feather
+                      name={resetToken ? "key" : "mail"}
+                      size={32}
+                      color={isDark ? "#64B5F6" : "#1976D2"}
+                    />
+                  </View>
+
+                  {resetToken ? (
+                    <>
+                      <Text style={[styles.resetPasswordSubtitle, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                        Entrez votre nouveau mot de passe
+                      </Text>
+
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                          Nouveau mot de passe
+                        </Text>
+                        <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
                           <Feather
-                            name="send"
+                            name="lock"
                             size={20}
-                            color="white"
-                            style={styles.submitButtonIcon}
+                            color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                            style={styles.inputIcon}
                           />
-                          <Text style={styles.submitButtonText}>Envoyer</Text>
+                          <TextInput
+                            style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                            placeholder="Nouveau mot de passe"
+                            placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                            secureTextEntry
+                            onChangeText={(text) => setPassword(text)}
+                            editable={!loading}
+                          />
                         </View>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[styles.submitButton, !password && styles.submitButtonDisabled]}
+                        onPress={() => handlePasswordReset(password)}
+                        disabled={!password || loading}
+                        activeOpacity={0.8}
+                      >
+                        <LinearGradient
+                          colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.submitButtonGradient}
+                        >
+                          {loading ? (
+                            <ActivityIndicator color="white" />
+                          ) : (
+                            <Text style={styles.submitButtonText}>Réinitialiser</Text>
+                          )}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={[styles.resetPasswordSubtitle, isDark ? styles.textLightSecondary : styles.textDarkSecondary]}>
+                        Entrez votre email professionnel et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+                      </Text>
+
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.inputLabel, isDark ? styles.textLight : styles.textDark]}>
+                          Email professionnel
+                        </Text>
+                        <View style={[styles.inputWrapper, isDark ? styles.inputWrapperDark : styles.inputWrapperLight]}>
+                          <Feather
+                            name="mail"
+                            size={20}
+                            color={isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(26, 31, 56, 0.6)"}
+                            style={styles.inputIcon}
+                          />
+                          <TextInput
+                            style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+                            placeholder="exemple@entreprise.com"
+                            placeholderTextColor={isDark ? "rgba(255, 255, 255, 0.4)" : "rgba(26, 31, 56, 0.4)"}
+                            value={resetEmail}
+                            onChangeText={setResetEmail}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            editable={!loading}
+                          />
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[styles.submitButton, !resetEmail && styles.submitButtonDisabled]}
+                        onPress={handleRequestPasswordReset}
+                        disabled={!resetEmail || loading}
+                        activeOpacity={0.8}
+                      >
+                        <LinearGradient
+                          colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.submitButtonGradient}
+                        >
+                          {loading ? (
+                            <ActivityIndicator color="white" />
+                          ) : (
+                            <Text style={styles.submitButtonText}>Envoyer le lien</Text>
+                          )}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               </View>
             )}
@@ -811,13 +672,6 @@ const Authentication = () => {
 };
 
 const styles = StyleSheet.create({
-  backgroundContainer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-  backgroundGradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
   safeArea: {
     flex: 1,
   },
@@ -861,11 +715,6 @@ const styles = StyleSheet.create({
   logo: {
     width: 200,
     height: 50,
-  },
-  gradientText: {
-    textShadowColor: "rgba(56, 189, 248, 0.5)",
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 3,
   },
   authCard: {
     borderRadius: 16,
@@ -974,13 +823,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
   },
-  footer: {
-    alignItems: "center",
-    marginTop: 16,
-  },
-  footerText: {
-    fontSize: 14,
-  },
   textLight: {
     color: "white",
   },
@@ -993,58 +835,64 @@ const styles = StyleSheet.create({
   textDarkSecondary: {
     color: "rgba(26, 31, 56, 0.7)",
   },
-  blockedMessage: {
-    backgroundColor: "rgba(244, 67, 54, 0.1)",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  blockedIcon: {
-    marginRight: 12,
-  },
-  blockedText: {
-    color: "#F44336",
-    flex: 1,
-    fontWeight: "500",
-  },
   forgotPasswordButton: {
     alignSelf: "flex-end",
-    marginTop: 8,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   forgotPasswordText: {
-    color: "#384bf8",
     fontSize: 14,
+    fontWeight: "500",
+  },
+  linkTextLight: {
+    color: "#384bf8",
+  },
+  linkTextDark: {
+    color: "#64B5F6",
   },
   resetPasswordContainer: {
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 8,
+    flex: 1,
+  },
+  resetPasswordHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
+    marginLeft: -8,
+    borderRadius: 20,
   },
   resetPasswordTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 4,
+    flex: 1,
+  },
+  resetPasswordContent: {
+    alignItems: "center",
+  },
+  resetPasswordIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  resetPasswordIconContainerLight: {
+    backgroundColor: "rgba(25, 118, 210, 0.1)",
+  },
+  resetPasswordIconContainerDark: {
+    backgroundColor: "rgba(100, 181, 246, 0.2)",
   },
   resetPasswordSubtitle: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  resetPasswordButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 16,
-  },
-  secondaryButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-  },
-  secondaryButtonText: {
-    color: "#384bf8",
-    fontWeight: "600",
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 32,
+    lineHeight: 24,
+    paddingHorizontal: 8,
   },
 });
 

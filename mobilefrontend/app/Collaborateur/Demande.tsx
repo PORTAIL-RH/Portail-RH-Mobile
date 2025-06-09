@@ -1,13 +1,7 @@
 import React, { useState } from 'react';
-import { Platform,View, Text, Image, TextInput, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import 'react-datepicker/dist/react-datepicker.css'; // Importez le style CSS
-//
+import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import DatePicker from 'react-datepicker'; // Pour le web
-import 'react-datepicker/dist/react-datepicker.css'; // Importer les styles de react-datepicker
-import { Ionicons } from '@expo/vector-icons'; // Pour les icônes modernes
-
+import { Ionicons } from '@expo/vector-icons';
 
 const AjouterDemande = () => {
   const [action, setAction] = useState<'formation' | 'congé' | 'autorisation'>('congé');

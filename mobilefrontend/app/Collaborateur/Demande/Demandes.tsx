@@ -1,85 +1,79 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
-  TouchableOpacity,
   ActivityIndicator,
   useColorScheme,
   Dimensions,
   Alert,
   Modal,
   Platform,
-} from "react-native"
-import { useNavigation } from "@react-navigation/native"
-import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import { ArrowLeft, Bell, Moon, Sun } from "lucide-react-native"
-import Footer from "../../Components/Footer"
-import { API_CONFIG } from "../../config/apiConfig"
-import Toast from "react-native-toast-message"
-import useApiPooling from "../../useApiPooling"
-import NavBar from "../../Components/NavBar"
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ArrowLeft, Bell, Moon, Sun } from "lucide-react-native";
+import Footer from "../../Components/Footer";
+import { API_CONFIG } from "../../config/apiConfig";
+import Toast from "react-native-toast-message";
+import useApiPooling from "../../useApiPooling";
+import NavBar from "../../Components/NavBar";
+import DemandesList from "./DemandesList";
+import DemandesDetails from "./DemandesDetails";
+import DemandesEditModal from "./DemandesEditModal";
 
-// Import our components
-import DemandesList from "./DemandesList"
-import DemandesDetails from "./DemandesDetails"
-import DemandesEditModal from "./DemandesEditModal"
-
-// Définir les types de navigation
+// Types and interfaces
 export type RootStackParamList = {
-  AccueilCollaborateur: undefined
-  Profile: undefined
-  Demandestot: undefined
-  Authentification: undefined
-  Notifications: undefined
-  Autorisation: undefined
-  AjouterDemande: undefined
-  Calendar: undefined
+  AccueilCollaborateur: undefined;
+  Profile: undefined;
+  Demandestot: undefined;
+  Authentification: undefined;
+  Notifications: undefined;
+  Autorisation: undefined;
+  AjouterDemande: undefined;
+  Calendar: undefined;
   DemandesEditModal: {
-    visible: boolean
-    onClose: () => void
-    onSave: () => void
-    editingRequest: Request | null
-    editableData: EditableRequestData
-    setEditableData: React.Dispatch<React.SetStateAction<EditableRequestData>>
-    isDarkMode: boolean
-    themeStyles: any
-    userId: string | null
-  }
+    visible: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    editingRequest: Request | null;
+    editableData: EditableRequestData;
+    setEditableData: React.Dispatch<React.SetStateAction<EditableRequestData>>;
+    isDarkMode: boolean;
+    themeStyles: any;
+    userId: string | null;
+  };
   DemandesDetails: {
-    visible: boolean
-    onClose: () => void
-    onEdit: (request: Request) => void
-    onDelete: (requestId: string, requestType: string) => void
-    selectedRequest: Request | null
-    isDarkMode: boolean
-    themeStyles: any
-    renderSafeText: (value: any) => string
-  }
+    visible: boolean;
+    onClose: () => void;
+    onEdit: (request: Request) => void;
+    onDelete: (requestId: string, requestType: string) => void;
+    selectedRequest: Request | null;
+    isDarkMode: boolean;
+    themeStyles: any;
+    renderSafeText: (value: any) => string;
+  };
   DemandesList: {
-    filteredRequests: Request[]
-    onSelectRequest: (request: Request) => void
-    isDarkMode: boolean
-    themeStyles: any
-    searchQuery: string
-    setSearchQuery: React.Dispatch<React.SetStateAction<string>>
-    activeFilter: string
-    setActiveFilter: React.Dispatch<React.SetStateAction<string>>
-    activeTypeFilter: string
-    setActiveTypeFilter: React.Dispatch<React.SetStateAction<string>>
-    filterRequests: (status: string, type?: string) => void
-    searchRequests: (text: string) => void
-  }
-}
+    filteredRequests: Request[];
+    onSelectRequest: (request: Request) => void;
+    isDarkMode: boolean;
+    themeStyles: any;
+    searchQuery: string;
+    setSearchQuery: React.Dispatch<React.SetStateAction<string>>;
+    activeFilter: string;
+    setActiveFilter: React.Dispatch<React.SetStateAction<string>>;
+    activeTypeFilter: string;
+    setActiveTypeFilter: React.Dispatch<React.SetStateAction<string>>;
+    filterRequests: (status: string, type?: string) => void;
+    searchRequests: (text: string) => void;
+    loading?: boolean;
+  };
+};
 
-type DemandesNavigationProp = NativeStackNavigationProp<RootStackParamList>
+type DemandesNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-// Get both width and height from Dimensions
-const { width, height } = Dimensions.get("window")
-
-// Export the interfaces for use in other components
 export interface FormationTitle {
   id: string;
   titre: string;
@@ -163,334 +157,134 @@ export interface Request {
   };
 }
 
-// Interface pour les données d'édition
 interface EditableRequestData {
-  description?: string
-  titre?: string
-  theme?: string
-  typeFormation?: string
-  typeDocument?: string
-  typePreavance?: string
-  montant?: string
-  horaireSortie?: string
-  horaireRetour?: string
-  minuteSortie?: string
-  minuteRetour?: string
-  startDate?: string
-  endDate?: string
-  duration?: string
-  periodeDebut?: string
-  periodeFin?: string
-  // Attachments: for uploading multiple files
+  description?: string;
+  titre?: string;
+  theme?: string;
+  typeFormation?: string;
+  typeDocument?: string;
+  typePreavance?: string;
+  montant?: string;
+  horaireSortie?: string;
+  horaireRetour?: string;
+  minuteSortie?: string;
+  minuteRetour?: string;
+  startDate?: string;
+  endDate?: string;
+  duration?: string;
+  periodeDebut?: string;
+  periodeFin?: string;
   files?: {
-    uri: string
-    name: string
-    type: string
-  }[]
-  titreId?: string
-  typeId?: string
-  themeId?: string
+    uri: string;
+    name: string;
+    type: string;
+  }[];
+  titreId?: string;
+  typeId?: string;
+  themeId?: string;
 }
 
-// Update the DemandesListProps interface to use our Request type
-export interface DemandesListProps {
-  filteredRequests: Request[]
-  onSelectRequest: (request: Request) => void
-  isDarkMode: boolean
-  themeStyles: any
-  searchQuery: string
-  setSearchQuery: React.Dispatch<React.SetStateAction<string>>
-  activeFilter: string
-  setActiveFilter: React.Dispatch<React.SetStateAction<string>>
-  activeTypeFilter: string
-  setActiveTypeFilter: React.Dispatch<React.SetStateAction<string>>
-  filterRequests: (status: string, type?: string) => void
-  searchRequests: (text: string) => void
-  loading?: boolean
-}
+const { width, height } = Dimensions.get("window");
 
 const DemandesPage = () => {
-  const navigation = useNavigation<DemandesNavigationProp>()
-  const systemColorScheme = useColorScheme()
-  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [activeFilter, setActiveFilter] = useState("all")
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null)
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [activeTypeFilter, setActiveTypeFilter] = useState("all")
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editingRequest, setEditingRequest] = useState<Request | null>(null)
-  const [editableData, setEditableData] = useState<EditableRequestData>({})
-  const [userId, setUserId] = useState<string | null>(null)
-  const [userToken, setUserToken] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [dateDebut, setDateDebut] = useState<Date | null>(null)
-  const [dateFin, setDateFin] = useState<Date | null>(null)
+  const navigation = useNavigation<DemandesNavigationProp>();
+  const systemColorScheme = useColorScheme();
+  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === "dark");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeTypeFilter, setActiveTypeFilter] = useState("all");
+  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<Request | null>(null);
+  const [editableData, setEditableData] = useState<EditableRequestData>({});
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userToken, setUserToken] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Add loading states for different operations
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const fetchWithValidation = async (url: string, token: string) => {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      console.warn(`API request failed: ${response.status} ${response.statusText}`);
-      return null; // Return null instead of throwing to continue processing other endpoints
-    }
-
-    const text = await response.text();
-    return text ? JSON.parse(text) : []; // Return empty array if response is empty
-  } catch (error) {
-    console.error(`Error fetching from ${url}:`, error);
-    return null; // Return null to indicate failure
-  }
-};
-
-  // Utiliser useApiPooling pour les demandes
-const {
-  data: requests,
-  loading,
-  error,
-  refresh: refreshRequests,
-} = useApiPooling<Request[]>({
-  apiCall: async () => {
-    if (!userId) {
-      throw new Error("ID utilisateur non disponible");
-    }
-
-    const token = await AsyncStorage.getItem("userToken");
-    if (!token) {
-      throw new Error("Token d'authentification non disponible");
-    }
-
-    const endpoints = [
-      `/api/demande-autorisation/personnel/${userId}`,
-      `/api/demande-conge/personnel/${userId}`,
-      `/api/demande-formation/personnel/${userId}`,
-      `/api/demande-pre-avance/personnel/${userId}`,
-      `/api/demande-document/personnel/${userId}`,
-    ];
-
-    // Fetch data from all endpoints with validation
-    const responses = await Promise.all(
-      endpoints.map((endpoint) =>
-        fetchWithValidation(
-          `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`,
-          token
-        )
-      )
-    );
-
-    // Filter out null responses (failed requests)
-    const validResponses = responses.filter((response) => response !== null);
-
-    // If all requests failed, throw an error
-    if (validResponses.length === 0) {
-      throw new Error("Toutes les requêtes API ont échoué");
-    }
-
-    // Process and combine all responses
-    const [autorisations, conges, formations, preAvances, documents] = responses.map(
-      (res) => res || [] // Use empty array if response was null
-    );
-
-    // Rest of your mapping logic...
-    const allDemandes: Request[] = [
-      ...mapDemandes(autorisations || [], "autorisation"),
-      ...mapDemandes(conges || [], "congé"),
-      ...mapDemandes(formations || [], "formation"),
-      ...mapDemandes(preAvances || [], "pre-avance"),
-      ...mapDemandes(documents || [], "document"),
-    ];
-
-    return allDemandes;
-  },
-    storageKey: "user_requests_data",
-    poolingInterval: 60000, // 1 minute
-    initialData: [],
-  })
-
-  // Filtrer les demandes en fonction des critères
-  const [filteredRequests, setFilteredRequests] = useState<Request[]>([])
-
-  // Mettre à jour les demandes filtrées lorsque les demandes changent
-  useEffect(() => {
-    if (requests) {
-      filterRequests(activeFilter, activeTypeFilter)
-    }
-  }, [requests, activeFilter, activeTypeFilter, searchQuery])
-
-  // Add this debugging function at the top of your component
-  useEffect(() => {
-    // This will help us identify what objects are causing problems
-    const originalError = console.error
-    console.error = (...args) => {
-      if (args[0] && typeof args[0] === "string" && args[0].includes("Objects are not valid as a React child")) {
-        console.log("Problematic object:", args[1])
-      }
-      originalError.apply(console, args)
-    }
-
-    return () => {
-      console.error = originalError
-    }
-  }, [])
-
-  // Charger les préférences de thème et récupérer les demandes
-  useEffect(() => {
-    const loadData = async () => {
-      await loadThemePreference()
-      await getUserInfo()
-    }
-    loadData()
-  }, [])
-
-  // Récupérer les informations utilisateur
-  const getUserInfo = async () => {
-    try {
-      const userInfo = await AsyncStorage.getItem("userInfo")
-      const token = await AsyncStorage.getItem("userToken")
-
-      if (userInfo && token) {
-        const parsedUser = JSON.parse(userInfo)
-        setUserId(parsedUser.id)
-        setUserToken(token)
-        console.log("User ID set in Demandes:", parsedUser.id)
-      } else {
-        console.error("User info or token missing in Demandes")
-      }
-    } catch (error) {
-      console.error("Error retrieving user info in Demandes:", error)
-    }
-  }
-
-  // First, let's make sure our renderSafeText function is robust
-  const renderSafeText = (value: any): string => {
-    if (value === null || value === undefined) {
-      return ""
-    }
-
-    if (typeof value === "string") {
-      return value
-    }
-
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value)
-    }
-
+  // Utility functions
+  const renderSafeText = useCallback((value: any): string => {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
     if (typeof value === "object") {
-      // Handle specific known object structures from your Java models
-
-      // Case for titre object
-      if (value.titre) {
-        return typeof value.titre === "string" ? value.titre : renderSafeText(value.titre)
-      }
-
-      // Case for type object
-      if (value.type) {
-        return typeof value.type === "string" ? value.type : renderSafeText(value.type)
-      }
-
-      // Case for theme object
-      if (value.theme) {
-        return typeof value.theme === "string" ? value.theme : renderSafeText(value.theme)
-      }
-
-      // Specific handling for formation objects that match the model structure
+      if (value.titre) return typeof value.titre === "string" ? value.titre : renderSafeText(value.titre);
+      if (value.type) return typeof value.type === "string" ? value.type : renderSafeText(value.type);
+      if (value.theme) return typeof value.theme === "string" ? value.theme : renderSafeText(value.theme);
       if (value.id) {
-        // If it has an id property, it's likely a database object
-        if (value.titre) return value.titre
-        if (value.theme) return value.theme
-        if (value.type) return value.type
+        if (value.titre) return value.titre;
+        if (value.theme) return value.theme;
+        if (value.type) return value.type;
       }
-
-      // For arrays, join the elements
-      if (Array.isArray(value)) {
-        return value.map(renderSafeText).join(", ")
-      }
-
-      // For other objects, convert to JSON string
+      if (Array.isArray(value)) return value.map(renderSafeText).join(", ");
       try {
-        return JSON.stringify(value)
+        return JSON.stringify(value);
       } catch (e) {
-        return "[Object]"
+        return "[Object]";
       }
     }
+    return String(value);
+  }, []);
 
-    return String(value)
-  }
-
-  // Add format functions
-  const formatDate = (dateString: string) => {
-    if (!dateString) return ""
+  const formatDate = useCallback((dateString: string) => {
+    if (!dateString) return "";
     try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) return dateString
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
       return date.toLocaleDateString("fr-FR", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
-      })
+      });
     } catch (error) {
-      console.error("Error formatting date:", error)
-      return dateString
+      console.error("Error formatting date:", error);
+      return dateString;
     }
-  }
+  }, []);
 
-  const formatTime = (dateString: string) => {
-    if (!dateString) return ""
+  const formatTime = useCallback((dateString: string) => {
+    if (!dateString) return "";
     try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) return ""
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "";
       return date.toLocaleTimeString("fr-FR", {
         hour: "2-digit",
         minute: "2-digit",
-      })
+      });
     } catch (error) {
-      console.error("Error formatting time:", error)
-      return ""
+      console.error("Error formatting time:", error);
+      return "";
     }
-  }
+  }, []);
 
-  // Update the getRequestStatus function
-  const getRequestStatus = (request: Request): "pending" | "approved" | "rejected" => {
-    // Check if it's a document or pre-avance request
+  const getRequestStatus = useCallback((request: Request): "pending" | "approved" | "rejected" => {
     if (request.type.toLowerCase().includes("document") || request.type.toLowerCase().includes("pre-avance")) {
       if (!request.responseRh) return "pending";
-      
       switch (request.responseRh) {
-        case "T":
-          return "approved"
-        case "N":
-          return "rejected"
+        case "T": return "approved";
+        case "N": return "rejected";
         case "I":
-        default:
-          return "pending"
+        default: return "pending";
       }
     }
     
-    // For other request types, use responseChefs
     if (!request.responseChefs) return "pending";
-    
     switch (request.responseChefs.responseChef1) {
-      case "O":
-        return "approved"
-      case "N":
-        return "rejected"
+      case "O": return "approved";
+      case "N": return "rejected";
       case "I":
-      default:
-        return "pending"
+      default: return "pending";
     }
-  }
+  }, []);
 
-  // Update the mapDemandes function with proper types
-  const mapDemandes = (data: any[], type: string): Request[] => {
-    if (!Array.isArray(data)) return []
+  const mapDemandes = useCallback((data: any[], type: string): Request[] => {
+    if (!Array.isArray(data)) return [];
 
     return data.map((item: any) => {
-      // Get the submission date (prioritize dateDemande)
       const submissionDate = item.dateDemande || "N/A";
       const formattedDate = submissionDate === "N/A" ? "N/A" : formatDate(submissionDate);
       const formattedTime = submissionDate === "N/A" ? "" : formatTime(submissionDate);
@@ -499,20 +293,20 @@ const {
         id: item.id || item._id,
         type,
         description: item.texteDemande || item.description || `Demande de ${type}`,
-        status: "pending", // This will be overridden by getRequestStatus
+        status: "pending",
         date: formattedDate,
         time: formattedTime,
         responseChefs: item.responseChefs,
         responseRh: item.reponseRH,
         details: {
           ...item,
-          dateDemande: submissionDate, // Add dateDemande to details
+          dateDemande: submissionDate,
           startDate: formatDate(item.dateDebut),
           endDate: formatDate(item.dateFin),
           duration: item.nbrJours?.toString(),
           montant: item.montant?.toString(),
         },
-      })
+      });
 
       return {
         id: item.id || item._id,
@@ -531,7 +325,7 @@ const {
         },
         details: {
           ...item,
-          dateDemande: submissionDate, // Add dateDemande to details
+          dateDemande: submissionDate,
           startDate: formatDate(item.dateDebut),
           endDate: formatDate(item.dateFin),
           duration: item.nbrJours?.toString(),
@@ -539,90 +333,175 @@ const {
           documents: Array.isArray(item.files) ? item.files : [],
           filesReponse: Array.isArray(item.filesReponse) ? item.filesReponse : [],
         },
-      }
-    })
-  }
+      };
+    });
+  }, [formatDate, formatTime, getRequestStatus]);
 
-  // Charger les préférences de thème
-  const loadThemePreference = async () => {
+  // Data loading
+  const loadThemePreference = useCallback(async () => {
     try {
-      const storedTheme = await AsyncStorage.getItem("@theme_mode")
+      const storedTheme = await AsyncStorage.getItem("@theme_mode");
       if (storedTheme !== null) {
-        setIsDarkMode(storedTheme === "dark")
+        setIsDarkMode(storedTheme === "dark");
       }
     } catch (error) {
-      console.error("Erreur lors du chargement des préférences de thème:", error)
+      console.error("Error loading theme preference:", error);
     }
-  }
+  }, []);
 
-  // Basculer entre les thèmes clair et sombre
-  const toggleTheme = async () => {
-    const newTheme = isDarkMode ? "light" : "dark"
-    setIsDarkMode(!isDarkMode)
+  const getUserInfo = useCallback(async () => {
     try {
-      await AsyncStorage.setItem("theme", newTheme)
-      await AsyncStorage.setItem("@theme_mode", newTheme)
+      const [id, token] = await Promise.all([
+        AsyncStorage.getItem("userId"),
+        AsyncStorage.getItem("userToken"),
+      ]);
+      setUserId(id);
+      setUserToken(token);
     } catch (error) {
-      console.error("Error saving theme preference:", error)
+      console.error("Error retrieving user info:", error);
     }
-  }
+  }, []);
 
-  // Filtrer les demandes par statut et type
-  const filterRequests = (status: string, type: string = activeTypeFilter) => {
-    let filtered = [...(requests || [])]
+  useEffect(() => {
+    const loadData = async () => {
+      await loadThemePreference();
+      await getUserInfo();
+    };
+    loadData();
+  }, [getUserInfo, loadThemePreference]);
 
-    // Filter by type first
-    if (type !== "all") {
-      filtered = filtered.filter((request) => request.type.toLowerCase().includes(type.toLowerCase()))
+  const toggleTheme = useCallback(async () => {
+    const newTheme = !isDarkMode ? "dark" : "light";
+    setIsDarkMode(!isDarkMode);
+    try {
+      await AsyncStorage.setItem("@theme_mode", newTheme);
+    } catch (error) {
+      console.error("Error saving theme preference:", error);
+    }
+  }, [isDarkMode]);
+
+  // API functions
+  const fetchWithValidation = useCallback(async (url: string, token: string) => {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(`API request failed: ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      const text = await response.text();
+      return text ? JSON.parse(text) : [];
+    } catch (error) {
+      console.error(`Error fetching from ${url}:`, error);
+      return null;
+    }
+  }, []);
+
+  const {
+    data: requests,
+    loading,
+    error,
+    refresh: refreshRequests,
+  } = useApiPooling<Request[]>({
+    apiCall: useCallback(async () => {
+      if (!userId || !userToken) return [];
+      
+      const endpoints = [
+        `/api/demande-autorisation/personnel/${userId}`,
+        `/api/demande-conge/personnel/${userId}`,
+        `/api/demande-formation/personnel/${userId}`,
+        `/api/demande-pre-avance/personnel/${userId}`,
+        `/api/demande-document/personnel/${userId}`,
+      ];
+
+      try {
+        const responses = await Promise.all(
+          endpoints.map(endpoint =>
+            fetchWithValidation(
+              `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`,
+              userToken
+            )
+          )
+        );
+
+        const [autorisations, conges, formations, preAvances, documents] = responses.map(
+          (res) => res || []
+        );
+
+        return [
+          ...mapDemandes(autorisations, "autorisation"),
+          ...mapDemandes(conges, "congé"),
+          ...mapDemandes(formations, "formation"),
+          ...mapDemandes(preAvances, "pre-avance"),
+          ...mapDemandes(documents, "document"),
+        ];
+      } catch (error) {
+        console.error("Error in API call:", error);
+        throw error;
+      }
+    }, [userId, userToken, fetchWithValidation, mapDemandes]),
+    storageKey: "user_requests_data",
+    poolingInterval: 60000,
+    initialData: [],
+  });
+
+  // Filtering logic
+  const filteredRequests = useMemo(() => {
+    if (!requests) return [];
+
+    let filtered = [...requests];
+
+    if (activeTypeFilter !== "all") {
+      filtered = filtered.filter((request) =>
+        request.type.toLowerCase().includes(activeTypeFilter.toLowerCase())
+      );
     }
 
-    // Then filter by status
-    if (status !== "all") {
+    if (activeFilter !== "all") {
       filtered = filtered.filter((request) => {
-        if (!request.responseChefs) return status === "pending"
+        if (!request.responseChefs) return activeFilter === "pending";
         
         switch (request.responseChefs.responseChef1) {
-          case "O":
-            return status === "approved"
-          case "N":
-            return status === "rejected"
+          case "O": return activeFilter === "approved";
+          case "N": return activeFilter === "rejected";
           case "I":
-          default:
-            return status === "pending"
+          default: return activeFilter === "pending";
         }
-      })
+      });
     }
 
-    setActiveFilter(status)
-    setActiveTypeFilter(type)
-    setFilteredRequests(filtered)
-  }
+    if (searchQuery) {
+      filtered = filtered.filter((request) =>
+        request.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        request.type.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
 
-  // Rechercher des demandes
-  const searchRequests = (text: string) => {
-    setSearchQuery(text)
-    filterRequests(activeFilter, activeTypeFilter)
-  }
+    return filtered;
+  }, [requests, activeFilter, activeTypeFilter, searchQuery]);
 
-  // Gérer le rafraîchissement
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await refreshRequests(true)
-    setRefreshing(false)
-  }
+  const filterRequests = useCallback((status: string, type: string = activeTypeFilter) => {
+    setActiveFilter(status);
+    setActiveTypeFilter(type);
+  }, [activeTypeFilter]);
 
-  // Afficher les détails de la demande
-  const viewRequestDetails = (request: Request) => {
-    setSelectedRequest(request)
-    setShowDetailsModal(true)
-  }
+  const searchRequests = useCallback((text: string) => {
+    setSearchQuery(text);
+  }, []);
 
-  // Update the prepareForEdit function to handle the new types
-  const prepareForEdit = (request: Request) => {
-    setEditingRequest(request)
-    console.log("Editing request:", request)
+  // Request actions
+  const viewRequestDetails = useCallback((request: Request) => {
+    setSelectedRequest(request);
+    setShowDetailsModal(true);
+  }, []);
 
-    // Set up the editable data first
+  const prepareForEdit = useCallback((request: Request) => {
+    setEditingRequest(request);
     setEditableData({
       description: request.description,
       titre: typeof request.details.titre === 'object' ? request.details.titre.titre : request.details.titre,
@@ -643,180 +522,167 @@ const {
       horaireRetour: renderSafeText(request.details.horaireRetour),
       minuteSortie: renderSafeText(request.details.minuteSortie),
       minuteRetour: renderSafeText(request.details.minuteRetour),
-    })
-    
-    // Close details modal and show edit modal
-    setShowDetailsModal(false)
-    setShowEditModal(true)
-  }
+    });
+    setShowDetailsModal(false);
+    setShowEditModal(true);
+  }, [renderSafeText]);
 
-  // Delete request
-const handleDeleteRequest = async (requestId: string, requestType: string) => {
-  try {
-    const token = await AsyncStorage.getItem("userToken");
-    if (!token) {
-      console.error("Authentication token not found");
-      Toast.show({
-        type: "error",
-        text1: "Erreur",
-        text2: "Token d'authentification non trouvé",
-      });
-      return;
-    }
+  const handleDeleteRequest = useCallback(async (requestId: string, requestType: string) => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      if (!token) {
+        console.error("Authentication token not found");
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Token d'authentification non trouvé",
+        });
+        return;
+      }
 
-    const endpointMap: Record<string, string> = {
-      autorisation: "demande-autorisation",
-      congé: "demande-conge",
-      formation: "demande-formation",
-      "pre-avance": "demande-pre-avance",
-      document: "demande-document",
-    };
+      const endpointMap: Record<string, string> = {
+        autorisation: "demande-autorisation",
+        congé: "demande-conge",
+        formation: "demande-formation",
+        "pre-avance": "demande-pre-avance",
+        document: "demande-document",
+      };
 
-    const typeKey = Object.keys(endpointMap).find(key => 
-      requestType.toLowerCase().includes(key.toLowerCase())
-    );
+      const typeKey = Object.keys(endpointMap).find(key => 
+        requestType.toLowerCase().includes(key.toLowerCase())
+      );
 
-    if (!typeKey) {
-      console.error("Unknown request type:", requestType);
-      Toast.show({
-        type: "error",
-        text1: "Erreur",
-        text2: "Type de demande inconnu",
-      });
-      return;
-    }
+      if (!typeKey) {
+        console.error("Unknown request type:", requestType);
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Type de demande inconnu",
+        });
+        return;
+      }
 
-    const endpoint = `/api/${endpointMap[typeKey]}/${requestId}`;
-    const fullUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`;
+      const endpoint = `/api/${endpointMap[typeKey]}/${requestId}`;
+      const fullUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}`;
 
-    Alert.alert(
-      "Confirmation", 
-      "Êtes-vous sûr de vouloir supprimer cette demande ?", 
-      [
-        {
-          text: "Annuler",
-          style: "cancel",
-        },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              console.log(`Deleting request: ${fullUrl}`);
+      Alert.alert(
+        "Confirmation", 
+        "Êtes-vous sûr de vouloir supprimer cette demande ?", 
+        [
+          {
+            text: "Annuler",
+            style: "cancel",
+          },
+          {
+            text: "Supprimer",
+            style: "destructive",
+            onPress: async () => {
+              setIsDeleting(true);
+              try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-              // First try DELETE method
-              let response = await fetch(fullUrl, {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
-                signal: controller.signal,
-              });
-
-              // If DELETE not allowed, try POST to delete endpoint
-              if (response.status === 405) {
-                response = await fetch(`${fullUrl}/delete`, {
-                  method: "POST",
+                let response = await fetch(fullUrl, {
+                  method: "DELETE",
                   headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                   },
                   signal: controller.signal,
                 });
-              }
 
-              clearTimeout(timeoutId);
-
-              // Don't try to parse JSON if response is empty (204)
-              if (response.status === 204) {
-                console.log("Delete successful (204 No Content)");
-              } else if (!response.ok) {
-                // Try to get error message, but don't fail if parsing fails
-                let errorText = "Échec de la suppression";
-                try {
-                  const errorData = await response.text();
-                  errorText = errorData || errorText;
-                } catch (e) {
-                  console.log("Couldn't parse error response", e);
+                if (response.status === 405) {
+                  response = await fetch(`${fullUrl}/delete`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    signal: controller.signal,
+                  });
                 }
-                throw new Error(errorText);
-              }
 
-              // Success - refresh data silently
-              try {
+                clearTimeout(timeoutId);
+
+                if (response.status === 204) {
+                  console.log("Delete successful (204 No Content)");
+                } else if (!response.ok) {
+                  let errorText = "Échec de la suppression";
+                  try {
+                    const errorData = await response.text();
+                    errorText = errorData || errorText;
+                  } catch (e) {
+                    console.log("Couldn't parse error response", e);
+                  }
+                  throw new Error(errorText);
+                }
+
+                // Force immediate refresh after successful deletion
                 await refreshRequests(true);
-              } catch (refreshError) {
-                console.log("Refresh after delete failed (non-critical)", refreshError);
-              }
 
-              setShowDetailsModal(false);
-
-              Toast.show({
-                type: "success",
-                text1: "Demande supprimée",
-                text2: "Votre demande a été supprimée avec succès",
-                position: "bottom",
-                visibilityTime: 4000,
-              });
-            } catch (error) {
-              clearTimeout(timeoutId);
-              console.error("Delete error:", error);
-
-              // Only show user-facing error if not a JSON parse error
-              if (!(error instanceof SyntaxError)) {
-                const errorMessage = error instanceof Error 
-                  ? error.message.includes("aborted")
-                    ? "La requête a expiré"
-                    : error.message
-                  : "Erreur inconnue";
+                setShowDetailsModal(false);
 
                 Toast.show({
-                  type: "error",
-                  text1: "Échec de la suppression",
-                  text2: errorMessage,
+                  type: "success",
+                  text1: "Demande supprimée",
+                  text2: "Votre demande a été supprimée avec succès",
                   position: "bottom",
                   visibilityTime: 4000,
                 });
-              }
-            }
-          },
-        },
-      ]
-    );
-  } catch (error) {
-    console.error("Error in delete process:", error);
-    // Only show non-JSON parse errors
-    if (!(error instanceof SyntaxError)) {
-      Toast.show({
-        type: "error",
-        text1: "Erreur",
-        text2: "Une erreur est survenue lors de la suppression",
-      });
-    }
-  }
-};
+              } catch (error) {
+                console.error("Delete error:", error);
+                if (!(error instanceof SyntaxError)) {
+                  const errorMessage = error instanceof Error 
+                    ? error.message.includes("aborted")
+                      ? "La requête a expiré"
+                      : error.message
+                    : "Erreur inconnue";
 
-  // Update the handleUpdateRequest function to handle the formation dropdown IDs
-  const handleUpdateRequest = async () => {
-    if (!editingRequest) {
-      console.error("No request is being edited")
-      return
+                  Toast.show({
+                    type: "error",
+                    text1: "Échec de la suppression",
+                    text2: errorMessage,
+                    position: "bottom",
+                    visibilityTime: 4000,
+                  });
+                }
+              } finally {
+                setIsDeleting(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error in delete process:", error);
+      if (!(error instanceof SyntaxError)) {
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: "Une erreur est survenue lors de la suppression",
+        });
+      }
     }
+  }, [refreshRequests]);
+
+  const handleUpdateRequest = useCallback(async () => {
+    if (!editingRequest) {
+      console.error("No request is being edited");
+      return;
+    }
+
+    setIsUpdating(true);
 
     try {
-      const token = await AsyncStorage.getItem("userToken")
+      const token = await AsyncStorage.getItem("userToken");
       if (!token) {
-        console.error("Authentication token not found")
+        console.error("Authentication token not found");
         Toast.show({
           type: "error",
           text1: "Erreur",
           text2: "Token d'authentification non trouvé",
-        })
-        return
+        });
+        return;
       }
 
       const endpointMap: { [key: string]: string } = {
@@ -825,74 +691,49 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
         formation: "/api/demande-formation",
         "pre-avance": "/api/demande-pre-avance",
         document: "/api/demande-document",
-      }
+      };
 
-      // Find the correct endpoint based on request type
-      let endpoint = ""
+      let endpoint = "";
       for (const [key, value] of Object.entries(endpointMap)) {
         if (editingRequest.type.toLowerCase().includes(key.toLowerCase())) {
-          endpoint = value
-          break
+          endpoint = value;
+          break;
         }
       }
 
       if (!endpoint) {
-        console.error("Unknown request type:", editingRequest.type)
+        console.error("Unknown request type:", editingRequest.type);
         Toast.show({
           type: "error",
           text1: "Erreur",
           text2: "Type de demande inconnu",
-        })
-        return
+        });
+        return;
       }
 
-      // Prepare data to send based on request type
       const requestData: any = {
-        // Always include the ID to ensure update rather than create
         id: editingRequest.id,
-      }
+      };
 
-      // Common field for all request types
       if (editableData.description) {
-        requestData.texteDemande = editableData.description
+        requestData.texteDemande = editableData.description;
       }
 
-      // Handle congé specific fields
       if (editingRequest.type.toLowerCase().includes("congé")) {
-        // Dates de début et fin
-        if (editableData.startDate) {
-          requestData.dateDebut = editableData.startDate
-        }
-
-        if (editableData.endDate) {
-          requestData.dateFin = editableData.endDate
-        }
-
-        // Périodes de début et fin
+        if (editableData.startDate) requestData.dateDebut = editableData.startDate;
+        if (editableData.endDate) requestData.dateFin = editableData.endDate;
         if (editableData.periodeDebut) {
-          requestData.snjTempDep = editableData.periodeDebut === "matin" ? "M" : "S"
+          requestData.snjTempDep = editableData.periodeDebut === "matin" ? "M" : "S";
         }
-
         if (editableData.periodeFin) {
-          requestData.snjTempRetour = editableData.periodeFin === "matin" ? "M" : "S"
+          requestData.snjTempRetour = editableData.periodeFin === "matin" ? "M" : "S";
         }
-
-        // Nombre de jours
-        if (editableData.duration) {
-          requestData.nbrJours = editableData.duration
-        }
-
-        // Date de reprise prévue (même que la date de fin)
-        if (editableData.endDate) {
-          requestData.dateReprisePrev = editableData.endDate
-        }
+        if (editableData.duration) requestData.nbrJours = editableData.duration;
+        if (editableData.endDate) requestData.dateReprisePrev = editableData.endDate;
       }
 
-      // Handle pre-avance specific fields and validation
       if (editingRequest.type.toLowerCase().includes("pre-avance")) {
-        requestData.typeDemande = "PreAvnace"
-
-        // Validate type exists
+        requestData.typeDemande = "PreAvnace";
         if (!editableData.typePreavance) {
           Toast.show({
             type: "error",
@@ -900,12 +741,11 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
             text2: "Veuillez sélectionner un type de pré-avance",
             position: "bottom",
             visibilityTime: 4000,
-          })
-          return
+          });
+          return;
         }
-        requestData.type = editableData.typePreavance
+        requestData.type = editableData.typePreavance;
 
-        // Validate amount
         if (!editableData.montant) {
           Toast.show({
             type: "error",
@@ -913,11 +753,11 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
             text2: "Veuillez saisir un montant",
             position: "bottom",
             visibilityTime: 4000,
-          })
-          return
+          });
+          return;
         }
 
-        const montant = Number.parseFloat(editableData.montant)
+        const montant = Number.parseFloat(editableData.montant);
         if (isNaN(montant)) {
           Toast.show({
             type: "error",
@@ -925,11 +765,10 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
             text2: "Veuillez saisir un nombre valide",
             position: "bottom",
             visibilityTime: 4000,
-          })
-          return
+          });
+          return;
         }
 
-        // Check against maximum amounts
         const typeMaxAmounts: Record<string, number> = {
           MEDICAL: 2000.0,
           SCOLARITE: 1500.0,
@@ -938,9 +777,9 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
           DEMENAGEMENT: 3000.0,
           MARIAGE: 5000.0,
           FUNERAILLES: 2000.0,
-        }
+        };
 
-        const maxAmount = typeMaxAmounts[requestData.type] || 0
+        const maxAmount = typeMaxAmounts[requestData.type] || 0;
 
         if (montant > maxAmount) {
           Toast.show({
@@ -949,93 +788,51 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
             text2: `Le maximum pour ${requestData.type} est ${maxAmount} €`,
             position: "bottom",
             visibilityTime: 5000,
-          })
-          return
+          });
+          return;
         }
 
-        requestData.montant = montant
+        requestData.montant = montant;
       }
 
-      // Handle autorisation specific fields
       if (editingRequest.type.toLowerCase().includes("autorisation")) {
-        if (editableData.startDate) {
-          requestData.dateDebut = editableData.startDate
-        }
-
+        if (editableData.startDate) requestData.dateDebut = editableData.startDate;
         if (editableData.horaireSortie && editableData.minuteSortie) {
-          const [hours, minutes] = editableData.horaireSortie.split(":")
-          requestData.horaireSortie = hours
-          requestData.minuteSortie = minutes
+          const [hours, minutes] = editableData.horaireSortie.split(":");
+          requestData.horaireSortie = hours;
+          requestData.minuteSortie = minutes;
         }
-
         if (editableData.horaireRetour && editableData.minuteRetour) {
-          const [hours, minutes] = editableData.horaireRetour.split(":")
-          requestData.horaireRetour = hours
-          requestData.minuteRetour = minutes
+          const [hours, minutes] = editableData.horaireRetour.split(":");
+          requestData.horaireRetour = hours;
+          requestData.minuteRetour = minutes;
         }
       }
 
-      // Handle formation specific fields
       if (editingRequest.type.toLowerCase().includes("formation")) {
-        if (editableData.startDate) {
-          requestData.dateDebut = editableData.startDate
-        }
-
-        if (editableData.duration) {
-          requestData.nbrJours = editableData.duration
-        }
-
-        // For formation requests, we need to send objects with IDs for titre, type, and theme
+        if (editableData.startDate) requestData.dateDebut = editableData.startDate;
+        if (editableData.duration) requestData.nbrJours = editableData.duration;
         if (editableData.titreId && editableData.titre) {
-          requestData.titre = { id: editableData.titreId, titre: editableData.titre }
+          requestData.titre = { id: editableData.titreId, titre: editableData.titre };
         }
-
         if (editableData.typeId && editableData.typeFormation) {
-          requestData.type = { id: editableData.typeId, type: editableData.typeFormation }
+          requestData.type = { id: editableData.typeId, type: editableData.typeFormation };
         }
-
         if (editableData.themeId && editableData.theme) {
-          requestData.theme = { id: editableData.themeId, theme: editableData.theme }
+          requestData.theme = { id: editableData.themeId, theme: editableData.theme };
         }
-
-        // Important: Do NOT include dateDemande in the request data
-        // This ensures the original submission date is preserved
-        // The backend should keep the original dateDemande unchanged
       }
 
-      // Handle document specific fields
       if (editingRequest.type.toLowerCase().includes("document")) {
-        // Set the typeDemande field
-        requestData.typeDemande = "Document"
-
-        // Set the typeDocument field if it exists
-        if (editableData.typeDocument) {
-          requestData.typeDocument = editableData.typeDocument
-        }
-
-        // Set the texteDemande field (description)
-        if (editableData.description) {
-          requestData.texteDemande = editableData.description
-        }
-
-        // Ensure we preserve the matPers reference
-        if (editingRequest.details && editingRequest.details.matPers) {
-          requestData.matPers = editingRequest.details.matPers
-        }
-
-        // Preserve the codeSoc if it exists
-        if (editingRequest.details && editingRequest.details.codeSoc) {
-          requestData.codeSoc = editingRequest.details.codeSoc
-        }
-
-        console.log("Document request data:", requestData)
+        requestData.typeDemande = "Document";
+        if (editableData.typeDocument) requestData.typeDocument = editableData.typeDocument;
+        if (editableData.description) requestData.texteDemande = editableData.description;
+        if (editingRequest.details?.matPers) requestData.matPers = editingRequest.details.matPers;
+        if (editingRequest.details?.codeSoc) requestData.codeSoc = editingRequest.details.codeSoc;
       }
 
-      console.log("Sending update with data:", JSON.stringify(requestData))
-      console.log(`Update URL: ${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${editingRequest.id}`)
-
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}${endpoint}/${editingRequest.id}`, {
         method: "PUT",
@@ -1045,21 +842,21 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
         },
         body: JSON.stringify(requestData),
         signal: controller.signal,
-      })
+      });
 
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to update request: ${errorText}`)
+        const errorText = await response.text();
+        throw new Error(`Failed to update request: ${errorText}`);
       }
 
-      // Refresh data after successful update
-      await refreshRequests(true)
-      setShowEditModal(false)
-      setShowDetailsModal(false)
+      // Force immediate refresh after successful update
+      await refreshRequests(true);
+      
+      setShowEditModal(false);
+      setShowDetailsModal(false);
 
-      // Show success toast with specific message based on request type
       Toast.show({
         type: "success",
         text1: "Demande mise à jour",
@@ -1067,7 +864,7 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
         position: "bottom",
         visibilityTime: 4000,
         autoHide: true,
-      })
+      });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === "AbortError") {
         Toast.show({
@@ -1077,13 +874,12 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
           position: "bottom",
           visibilityTime: 4000,
           autoHide: true,
-        })
+        });
       } else {
-        console.error("Error updating request:", error)
-
-        let errorMessage = "Erreur lors de la mise à jour"
+        console.error("Error updating request:", error);
+        let errorMessage = "Erreur lors de la mise à jour";
         if (error instanceof Error) {
-          errorMessage = error.message.includes("dépasser") ? error.message : "Erreur serveur lors de la mise à jour"
+          errorMessage = error.message.includes("dépasser") ? error.message : "Erreur serveur lors de la mise à jour";
         }
 
         Toast.show({
@@ -1093,44 +889,45 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
           position: "bottom",
           visibilityTime: 4000,
           autoHide: true,
-        })
+        });
       }
+    } finally {
+      setIsUpdating(false);
     }
-  }
+  }, [editingRequest, editableData, refreshRequests]);
 
-  // Logout handler
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
-      await AsyncStorage.clear()
+      await AsyncStorage.clear();
       Toast.show({
         type: "success",
         text1: "Déconnexion réussie",
         text2: "Vous avez été déconnecté avec succès.",
         visibilityTime: 2000,
-      })
-      navigation.navigate("Authentification")
+      });
+      navigation.navigate("Authentification");
     } catch (error) {
-      console.error("Error logging out:", error)
+      console.error("Error logging out:", error);
       Toast.show({
         type: "error",
         text1: "Erreur",
         text2: "Échec de la déconnexion. Veuillez réessayer.",
         visibilityTime: 2000,
-      })
+      });
     }
-  }
+  }, [navigation]);
 
-  // Define theme styles with proper dark theme colors
+  // Theme styles with integrated spinner styles
   const darkStyles = StyleSheet.create({
     container: {
-      backgroundColor: "#1A1F38", // Updated to blue background
+      backgroundColor: "#1A1F38",
     },
     content: {
-      backgroundColor: "#1A1F38", // Match container background
+      backgroundColor: "#1A1F38",
       flex: 1,
     },
     header: {
-      backgroundColor: "#242B42", // Slightly lighter than container
+      backgroundColor: "#242B42",
       borderBottomColor: "rgba(255,255,255,0.1)",
     },
     searchContainer: {
@@ -1165,7 +962,7 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
       color: "#AAAAAA",
     },
     card: {
-      backgroundColor: "#242B42", // Slightly lighter than container
+      backgroundColor: "#242B42",
       borderColor: "rgba(255,255,255,0.1)",
     },
     activeFilterOption: {
@@ -1183,14 +980,38 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
     detailsCancelButtonText: {
       color: "#FF453A",
     },
-  })
+    // Spinner styles for dark mode
+    spinnerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#1A1F38',
+    },
+    spinnerText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: '#FFFFFF',
+      textAlign: 'center',
+    },
+    loadingOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(26, 31, 56, 0.9)',
+      zIndex: 1000,
+    },
+  });
 
   const lightStyles = StyleSheet.create({
     container: {
       backgroundColor: "#F5F5F5",
     },
     content: {
-      backgroundColor: "#F5F5F5", // Match container background
+      backgroundColor: "#F5F5F5",
     },
     header: {
       backgroundColor: "#FFFFFF",
@@ -1246,10 +1067,55 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
     detailsCancelButtonText: {
       color: "#FFFFFF",
     },
-  })
+    // Spinner styles for light mode
+    spinnerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#F5F5F5',
+    },
+    spinnerText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: '#333333',
+      textAlign: 'center',
+    },
+    loadingOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(245, 245, 245, 0.9)',
+      zIndex: 1000,
+    },
+  });
 
-  // Apply theme styles
-  const themeStyles = isDarkMode ? darkStyles : lightStyles
+  const themeStyles = isDarkMode ? darkStyles : lightStyles;
+
+  // Loading component
+  const LoadingSpinner = ({ message = "Chargement en cours..." }) => (
+    <View style={themeStyles.spinnerContainer}>
+      <ActivityIndicator 
+        size="large" 
+        color="#9370DB"
+      />
+      <Text style={themeStyles.spinnerText}>{message}</Text>
+    </View>
+  );
+
+  // Loading overlay component for modals
+  const LoadingOverlay = ({ message = "Chargement..." }) => (
+    <View style={themeStyles.loadingOverlay}>
+      <ActivityIndicator 
+        size="large" 
+        color="#9370DB"
+      />
+      <Text style={themeStyles.spinnerText}>{message}</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
@@ -1261,17 +1127,16 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
         handleLogout={handleLogout}
       />
 
-      <View style={[styles.content, themeStyles.content]}>
-        {loading ? (
-          <View style={[styles.loadingContainer, themeStyles.content]}>
-            <ActivityIndicator size="large" color={isDarkMode ? "#9370DB" : "#9370DB"} />
-            <Text style={[styles.loadingText, themeStyles.text]}>Chargement des demandes...</Text>
-          </View>
-        ) : error ? (
-          <View style={[styles.errorContainer, themeStyles.content]}>
-            <Text style={[styles.errorText, themeStyles.text]}>Une erreur est survenue lors du chargement des demandes.</Text>
-          </View>
-        ) : (
+      {loading ? (
+        <LoadingSpinner message="Chargement des demandes..." />
+      ) : error ? (
+        <View style={[styles.errorContainer, themeStyles.content]}>
+          <Text style={[styles.errorText, themeStyles.text]}>
+            Une erreur est survenue lors du chargement des demandes.
+          </Text>
+        </View>
+      ) : (
+        <View style={[styles.content, themeStyles.content]}>
           <DemandesList
             filteredRequests={filteredRequests}
             onSelectRequest={viewRequestDetails}
@@ -1287,8 +1152,8 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
             searchRequests={searchRequests}
             loading={loading}
           />
-        )}
-      </View>
+        </View>
+      )}
 
       {/* Details Modal */}
       <Modal
@@ -1299,16 +1164,21 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
         statusBarTranslucent={true}
       >
         {selectedRequest && (
-          <DemandesDetails
-            visible={showDetailsModal}
-            onClose={() => setShowDetailsModal(false)}
-            onEdit={prepareForEdit}
-            onDelete={handleDeleteRequest}
-            selectedRequest={selectedRequest}
-            isDarkMode={isDarkMode}
-            themeStyles={themeStyles}
-            renderSafeText={renderSafeText}
-          />
+          <View style={styles.modalContainer}>
+            {isDeleting && (
+              <LoadingOverlay message="Suppression en cours..." />
+            )}
+            <DemandesDetails
+              visible={showDetailsModal}
+              onClose={() => setShowDetailsModal(false)}
+              onEdit={prepareForEdit}
+              onDelete={handleDeleteRequest}
+              selectedRequest={selectedRequest}
+              isDarkMode={isDarkMode}
+              themeStyles={themeStyles}
+              renderSafeText={renderSafeText}
+            />
+          </View>
         )}
       </Modal>
 
@@ -1321,24 +1191,28 @@ const handleDeleteRequest = async (requestId: string, requestType: string) => {
         statusBarTranslucent={true}
       >
         {editingRequest && (
-          <DemandesEditModal
-            editingRequest={editingRequest}
-            editableData={editableData}
-            setEditableData={setEditableData}
-            isDarkMode={isDarkMode}
-            themeStyles={themeStyles}
-            userId={userId}
-            onSave={handleUpdateRequest}
-            onClose={() => setShowEditModal(false)}
-          />
+          <View style={styles.modalContainer}>
+            {isUpdating && (
+              <LoadingOverlay message="Mise à jour en cours..." />
+            )}
+            <DemandesEditModal
+              editingRequest={editingRequest}
+              editableData={editableData}
+              setEditableData={setEditableData}
+              isDarkMode={isDarkMode}
+              themeStyles={themeStyles}
+              userId={userId}
+              onSave={handleUpdateRequest}
+              onClose={() => setShowEditModal(false)}
+            />
+          </View>
         )}
       </Modal>
 
-      {/* Footer */}
       <Footer />
     </SafeAreaView>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -1346,15 +1220,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
   },
   errorContainer: {
     flex: 1,
@@ -1365,7 +1230,11 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 15,
     textAlign: "center",
-  }
-})
+  },
+  modalContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+});
 
-export default DemandesPage
+export default DemandesPage;

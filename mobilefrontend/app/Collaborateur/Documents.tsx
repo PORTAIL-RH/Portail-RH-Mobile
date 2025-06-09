@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,18 +14,21 @@ import {
   ListRenderItem,
   Linking,
   Share,
+  Image as RNImage,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import NavBar from "../Components/NavBar"; // Ensure this path is correct
-import Footer from "../Components/Footer"; // Ensure this path is correct
+import NavBar from "../Components/NavBar";
+import Footer from "../Components/Footer";
 import * as FileSystem from "expo-file-system";
 import * as IntentLauncher from "expo-intent-launcher";
 import { shareAsync } from "expo-sharing";
 import { WebView } from "react-native-webview";
-import { API_CONFIG } from "../config/apiConfig"; // Ensure this path is correct
-import Pdf from 'react-native-pdf';
+import { API_CONFIG } from "../config/apiConfig";
+import Toast from "react-native-toast-message";
+import { X, Download } from "lucide-react-native";
+
 const { width } = Dimensions.get("window");
 
 interface Document {
@@ -36,7 +39,7 @@ interface Document {
   url: string;
   mimeType: string;
   filename: string;
-  fileId?: string; // Kept for compatibility, id is used as primary
+  fileId?: string;
 }
 
 interface CachedData {
@@ -59,7 +62,8 @@ const DocumentsScreen: React.FC = () => {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-  const [token, setToken] = useState<string>(""); // Explicitly string
+  const [token, setToken] = useState<string>("");
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   // Load theme, user ID and token from storage
@@ -72,10 +76,9 @@ const DocumentsScreen: React.FC = () => {
       ]);
       setIsDarkMode(storedTheme === "dark");
       if (storedUserId) setUserId(storedUserId);
-      setToken(storedToken || ""); // Default to empty string if null
+      setToken(storedToken || "");
     } catch (error) {
       console.error("Error loading data:", error);
-      Alert.alert("Erreur critique", "Impossible de charger les données initiales. Veuillez redémarrer l'application.");
     }
   }, []);
 
@@ -103,17 +106,16 @@ const DocumentsScreen: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // Add logout handler (required by NavBar props)
+  // Add logout handler
   const handleLogout = useCallback(async () => {
     try {
       await AsyncStorage.multiRemove(["userToken", "userId", "theme"]);
-      // You might want to navigate to login screen or trigger auth state change here
     } catch (error) {
       console.error("Error during logout:", error);
     }
   }, []);
 
-  // Load cached data
+  // Optimized cache loading with error handling
   const loadCachedDocuments = useCallback(async () => {
     try {
       const cachedData = await AsyncStorage.getItem(CACHE_KEY);
@@ -123,21 +125,20 @@ const DocumentsScreen: React.FC = () => {
         const isSameUser = cachedUserId === userId;
 
         if (!isExpired && isSameUser && cachedDocs.length > 0) {
-          console.log('[CACHE] Using cached documents');
           setDocuments(cachedDocs);
           setFilteredDocuments(cachedDocs);
           setIsLoading(false);
-          return true; // Cache was valid and used
+          return true;
         }
       }
-      return false; // Cache was invalid or not found
+      return false;
     } catch (error) {
-      console.error('[CACHE] Error loading cached documents:', error);
+      console.error('Error loading cached documents:', error);
       return false;
     }
   }, [userId]);
 
-  // Cache the documents
+  // Optimized document caching
   const cacheDocuments = useCallback(async (docs: Document[]) => {
     try {
       const cacheData: CachedData = {
@@ -146,18 +147,14 @@ const DocumentsScreen: React.FC = () => {
         userId: userId || '',
       };
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-      console.log('[CACHE] Documents cached successfully');
     } catch (error) {
-      console.error('[CACHE] Error caching documents:', error);
+      console.error('Error caching documents:', error);
     }
   }, [userId]);
 
-  // Modified fetchDocuments to work with cache
+  // Optimized fetchDocuments with timeout and retry
   const fetchDocuments = useCallback(async (forceFetch: boolean = false) => {
-    console.log('[DEBUG] Starting fetchDocuments...');
-    
     if (!userId || !token) {
-      console.error('[ERROR] Missing required data for fetching documents:', { userIdExists: !!userId, tokenExistsAndNotEmpty: !!token });
       setIsLoading(false);
       return;
     }
@@ -169,12 +166,15 @@ const DocumentsScreen: React.FC = () => {
       if (!forceFetch) {
         const usedCache = await loadCachedDocuments();
         if (usedCache) {
-          return; // Exit if we successfully used the cache
+          return;
         }
       }
 
+      // Create abort controller for timeout
+      const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 15000); // Increase to 15 seconds
+
       const apiUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-document/personnel/${userId}/files-reponse`;
-      console.log('[DEBUG] Fetching fresh documents from:', apiUrl);
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -182,28 +182,19 @@ const DocumentsScreen: React.FC = () => {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        const errorBody = await response.text();
-        console.error('[ERROR] API Error Response:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorBody,
-        });
-        
-        if (response.status === 401) {
-          // Handle unauthorized - clear cache
-          await AsyncStorage.removeItem(CACHE_KEY);
-        }
-        
-        throw new Error(`HTTP ${response.status}: ${errorBody || 'Failed to fetch documents'}`);
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      const formattedDocuments: Document[] = (data || [])
+      const formattedDocuments = (data || [])
         .map((doc: any) => {
-          if (!doc || !doc.fileId) return null;
+          if (!doc?.fileId) return null;
           return {
             id: doc.fileId,
             title: doc.filename || `Document ${doc.fileId}`,
@@ -212,24 +203,22 @@ const DocumentsScreen: React.FC = () => {
             url: `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${doc.fileId}`,
             mimeType: doc.fileType || 'application/octet-stream',
             filename: doc.filename || `document-${doc.fileId}.${doc.fileType?.split('/')[1] || 'bin'}`,
+            fileId: doc.fileId,
           };
         })
-        .filter((doc: Document | null): doc is Document => doc !== null);
+        .filter(Boolean);
 
       setDocuments(formattedDocuments);
       setFilteredDocuments(formattedDocuments);
-      
-      // Cache the new documents
       await cacheDocuments(formattedDocuments);
       
     } catch (error) {
-      console.error('[ERROR] Fetch documents failed:', error);
-      // Try to load from cache as fallback if fetch fails
+      console.error('Fetch documents failed:', error);
       const usedCache = await loadCachedDocuments();
       if (!usedCache) {
         Alert.alert(
-          'Erreur de connexion',
-          'Impossible de charger les documents. Veuillez vérifier votre connexion internet ou réessayer plus tard.'
+          'Connection Error',
+          'Could not load documents. Please check your internet connection.'
         );
       }
     } finally {
@@ -239,16 +228,16 @@ const DocumentsScreen: React.FC = () => {
 
   // Add pull-to-refresh functionality
   const onRefresh = useCallback(() => {
-    fetchDocuments(true); // Force fetch from server
+    fetchDocuments(true);
   }, [fetchDocuments]);
 
   useEffect(() => {
     if (userId && token) {
-      fetchDocuments(false); // Try to use cache first
+      fetchDocuments();
     }
   }, [userId, token, fetchDocuments]);
 
-  // Filter documents based on search query
+  // Optimized document filtering with memoization
   useEffect(() => {
     if (searchQuery) {
       const results = documents.filter((doc) =>
@@ -260,34 +249,34 @@ const DocumentsScreen: React.FC = () => {
     }
   }, [searchQuery, documents]);
 
-  // Get appropriate icon for file type
-  const getFileIcon = useCallback((mimeType: string): keyof typeof Feather.glyphMap => {
+  // Memoized file icon getter
+  const getFileIcon = useMemo(() => (mimeType: string): keyof typeof Feather.glyphMap => {
     if (!mimeType) return "file";
-    const lowerMimeType = mimeType.toLowerCase();
-    if (lowerMimeType.includes("pdf")) return "file-text";
-    if (lowerMimeType.includes("image")) return "image";
-    if (lowerMimeType.includes("word")) return "file-text"; 
-    if (lowerMimeType.includes("excel") || lowerMimeType.includes("spreadsheet")) return "grid"; 
-    if (lowerMimeType.includes("powerpoint") || lowerMimeType.includes("presentation")) return "airplay"; 
-    if (lowerMimeType.includes("zip") || lowerMimeType.includes("archive")) return "archive";
-    if (lowerMimeType.includes("text")) return "file-text";
+    const type = mimeType.toLowerCase();
+    if (type.includes("pdf")) return "file-text";
+    if (type.includes("image")) return "image";
+    if (type.includes("word")) return "file-text"; 
+    if (type.includes("excel") || type.includes("spreadsheet")) return "grid"; 
+    if (type.includes("powerpoint") || type.includes("presentation")) return "airplay"; 
+    if (type.includes("zip") || type.includes("archive")) return "archive";
+    if (type.includes("text")) return "file-text";
     return "file";
   }, []);
 
-  // Add helper function to get friendly file type name
-  const getFileTypeName = useCallback((mimeType: string): string => {
+  // Memoized file type name getter
+  const getFileTypeName = useMemo(() => (mimeType: string): string => {
     const type = mimeType.toLowerCase();
     if (type.includes('pdf')) return 'PDF';
     if (type.includes('image')) return 'Image';
     if (type.includes('word') || type.includes('document')) return 'Document';
-    if (type.includes('excel') || type.includes('sheet')) return 'Feuille de calcul';
-    if (type.includes('powerpoint') || type.includes('presentation')) return 'Présentation';
-    if (type.includes('text')) return 'Texte';
+    if (type.includes('excel') || type.includes('sheet')) return 'Spreadsheet';
+    if (type.includes('powerpoint') || type.includes('presentation')) return 'Presentation';
+    if (type.includes('text')) return 'Text';
     if (type.includes('zip') || type.includes('archive')) return 'Archive';
-    return 'Fichier';
+    return 'File';
   }, []);
 
-  // Modify the openFile function to properly handle file access
+  // Optimized file opening with error handling
   const openFile = useCallback(async (fileUri: string, mimeType: string) => {
     try {
       if (Platform.OS === "android") {
@@ -298,95 +287,21 @@ const DocumentsScreen: React.FC = () => {
           type: mimeType,
         });
       } else {
-        // For iOS, we need to ensure the file is in a shared location
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        if (!fileInfo.exists) {
-          throw new Error("File doesn't exist");
-        }
-        
-        // Create a temporary file in the cache directory which is accessible
         const tempFile = `${FileSystem.cacheDirectory}temp_${Date.now()}_${fileUri.split('/').pop()}`;
-        await FileSystem.copyAsync({
-          from: fileUri,
-          to: tempFile
-        });
-        
-        await shareAsync(tempFile, { 
-          mimeType, 
-          UTI: mimeType,
-          dialogTitle: 'Ouvrir le document'
-        });
-        
-        // Clean up the temp file after sharing
-        try {
-          await FileSystem.deleteAsync(tempFile, { idempotent: true });
-        } catch (cleanupError) {
-          console.warn("Cleanup error:", cleanupError);
-        }
+        await FileSystem.copyAsync({ from: fileUri, to: tempFile });
+        await shareAsync(tempFile, { mimeType, UTI: mimeType });
+        await FileSystem.deleteAsync(tempFile, { idempotent: true });
       }
     } catch (error) {
       console.error("Error opening file:", error);
-      Alert.alert("Erreur", "Impossible d'ouvrir le fichier. Veuillez réessayer.");
+      Alert.alert("Error", "Could not open file. Please try again.");
     }
   }, []);
 
-  // Modify the download function to use proper directories and handle permissions
-  const performActualDownload = useCallback(async (document: Document, filename: string) => {
-    if (!token) {
-      Alert.alert("Erreur d'authentification", "Token manquant. Impossible de télécharger.");
-      setIsLoadingDownload(false);
-      setDownloadingItemId(null);
-      return;
-    }
-
-    try {
-      // Use cache directory for temporary storage
-      const tempDirectory = FileSystem.cacheDirectory;
-      if (!tempDirectory) {
-        throw new Error("Cannot access cache directory");
-      }
-
-      // Create a safe filename
-      const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const downloadPath = `${tempDirectory}${safeFilename}`;
-
-      // Download the file
-      const downloadResumable = FileSystem.createDownloadResumable(
-        document.url,
-        downloadPath,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-        (downloadProgress) => {
-          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-          console.log(`Download progress: ${progress * 100}%`);
-        }
-      );
-
-      const result = await downloadResumable.downloadAsync();
-      if (!result?.uri) {
-        throw new Error("Download failed - no URI received");
-      }
-
-      // Open the downloaded file
-      await openFile(result.uri, document.mimeType);
-
-    } catch (error) {
-      console.error("Download error:", error);
-      Alert.alert(
-        "Erreur de téléchargement",
-        "Impossible de télécharger le document. Veuillez réessayer."
-      );
-    } finally {
-      setIsLoadingDownload(false);
-      setDownloadingItemId(null);
-    }
-  }, [token, openFile]);
-
-  // Modify handleDownload to use the new performActualDownload
+  // Optimized download function with progress tracking
   const handleDownload = useCallback(async (document: Document) => {
-    if (!document?.filename || !document?.url) {
-      Alert.alert("Erreur", "Informations de document invalides pour le téléchargement.");
+    if (!document?.filename || !document?.url || !token) {
+      Alert.alert("Error", "Invalid document information for download.");
       return;
     }
 
@@ -394,28 +309,62 @@ const DocumentsScreen: React.FC = () => {
     setIsLoadingDownload(true);
 
     try {
-      await performActualDownload(document, document.filename);
-    } catch (error) {
-      console.error("Error in handleDownload:", error);
-      Alert.alert(
-        "Erreur",
-        "Une erreur est survenue lors du téléchargement. Veuillez réessayer."
+      const tempDirectory = FileSystem.cacheDirectory;
+      if (!tempDirectory) throw new Error("Cannot access cache directory");
+
+      const safeFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const downloadPath = `${tempDirectory}${safeFilename}`;
+      const downloadUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${document.fileId || document.id}`;
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        downloadUrl,
+        downloadPath,
+        {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Accept': '*/*',
+          },
+        }
       );
+
+      const result = await downloadResumable.downloadAsync();
+      
+      if (!result?.uri) throw new Error("Download failed - no URI received");
+
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(result.uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1,
+          type: document.mimeType,
+        });
+      } else {
+        await shareAsync(result.uri, {
+          mimeType: document.mimeType,
+          UTI: document.mimeType,
+          dialogTitle: "Open Document",
+        });
+      }
+
+      Toast.show({
+        type: "success",
+        text1: "Success",
+        text2: "File downloaded successfully",
+        visibilityTime: 2000,
+      });
+    } catch (error) {
+      console.error("Download error:", error);
+      Alert.alert("Error", "Failed to download file. Please try again.");
+    } finally {
       setIsLoadingDownload(false);
       setDownloadingItemId(null);
     }
-  }, [performActualDownload]);
+  }, [token]);
 
-  // Handle document preview
+  // Optimized preview handler
   const handlePreview = useCallback((document: Document) => {
-    console.log('[PREVIEW] Attempting to preview:', document.filename, document.mimeType);
-    
-    if (!token) {
-      Alert.alert("Erreur d'authentification", "Token manquant. Impossible de prévisualiser.");
-      return;
-    }
-    if (!document.url || !document.mimeType) {
-      Alert.alert("Erreur", "Informations invalides pour la prévisualisation du document.");
+    if (!token || !document.url || !document.mimeType) {
+      Alert.alert("Error", "Invalid document information for preview.");
       return;
     }
 
@@ -425,11 +374,11 @@ const DocumentsScreen: React.FC = () => {
 
     if (!canDirectlyPreview) {
       Alert.alert(
-        "Aperçu non supporté",
-        `Ce type de fichier (${document.mimeType}) n'est pas directement prévisualisable. Essayez de le télécharger.`,
+        "Preview Not Supported",
+        `This file type (${document.mimeType}) cannot be previewed directly. Try downloading it.`,
         [
-          { text: "Annuler", style: "cancel" },
-          { text: "Télécharger", onPress: () => handleDownload(document) }
+          { text: "Cancel", style: "cancel" },
+          { text: "Download", onPress: () => handleDownload(document) }
         ]
       );
       return;
@@ -442,115 +391,101 @@ const DocumentsScreen: React.FC = () => {
   const closePreview = useCallback(() => {
     setPreviewVisible(false);
     setSelectedDocument(null);
+    setImageUri(null);
   }, []);
 
-  const renderPreviewModal = useCallback(() => {
-    if (!selectedDocument) return null;
+  // Optimized image loading for preview
+  useEffect(() => {
+    if (selectedDocument?.mimeType?.startsWith('image/') && token) {
+      const loadImage = async () => {
+        try {
+          const tempDir = FileSystem.cacheDirectory;
+          const fileName = selectedDocument.filename.split('/').pop();
+          const localPath = `${tempDir}${fileName}`;
+          
+          const downloadResumable = FileSystem.createDownloadResumable(
+            `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${selectedDocument.fileId || selectedDocument.id}`,
+            localPath,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          );
 
-    const webViewLoadingBackgroundColor = isDarkMode ? 'rgba(26, 31, 56, 0.9)' : 'rgba(255, 255, 255, 0.9)';
-    
-    const webViewSource = {
-      uri: selectedDocument.url,
-      headers: { 
-        Authorization: `Bearer ${token}`,
-        'Cache-Control': 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      },
+          const result = await downloadResumable.downloadAsync();
+          if (result?.uri) {
+            setImageUri(result.uri);
+          }
+        } catch (error) {
+          console.error('Error loading image:', error);
+        }
+      };
+
+      loadImage();
+    }
+  }, [selectedDocument, token]);
+
+  // Optimized preview modal rendering
+  const renderPreviewModal = useMemo(() => {
+    if (!selectedDocument || !token) return null;
+
+    const decodedFilename = decodeURIComponent(selectedDocument.filename);
+    const source = {
+      uri: `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${selectedDocument.fileId || selectedDocument.id}`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': selectedDocument.mimeType,
+      }
     };
 
     return (
-      <Modal
-        visible={previewVisible}
-        animationType="slide"
-        onRequestClose={closePreview}
-        transparent={false}
-      >
-        <View style={[
-          styles.modalContainer,
-          isDarkMode ? styles.modalContainerDark : styles.modalContainerLight,
-          { paddingTop: insets.top }
-        ]}>
-          <View style={[styles.modalHeader, isDarkMode ? styles.modalHeaderDark : styles.modalHeaderLight]}>
-            <Text
-              style={[styles.modalTitle, isDarkMode ? styles.textLight : styles.textDark]}
-              numberOfLines={1}
-              ellipsizeMode="middle"
-            >
-              {selectedDocument.filename}
+      <Modal visible={previewVisible} animationType="slide" onRequestClose={closePreview}>
+        <View style={[styles.modalContainer, isDarkMode && styles.modalContainerDark]}>
+          <View style={[styles.modalHeader, isDarkMode && styles.modalHeaderDark]}>
+            <Text style={[styles.modalTitle, isDarkMode ? styles.textLight : styles.textDark]} numberOfLines={1}>
+              {decodedFilename}
             </Text>
-            <TouchableOpacity 
-              onPress={closePreview}
-              style={styles.modalCloseButton}
-            >
-              <Feather 
-                name="x" 
-                size={28} 
-                color={isDarkMode ? "#E0E0E0" : "#555555"}
-              />
+            <TouchableOpacity onPress={closePreview} style={styles.modalCloseButton}>
+              <X size={28} color={isDarkMode ? "#E0E0E0" : "#555555"} />
             </TouchableOpacity>
           </View>
 
-          <WebView
-            key={`${selectedDocument.id}-${token}-${selectedDocument.url}`}
-            source={webViewSource}
-            style={[styles.webView, { backgroundColor: isDarkMode ? '#121212' : '#FFFFFF' }]}
-            containerStyle={{ flex: 1, backgroundColor: isDarkMode ? '#121212' : '#FFFFFF' }}
-            startInLoadingState={true}
-            renderLoading={() => (
-              <View style={[styles.webViewLoading, { backgroundColor: webViewLoadingBackgroundColor }]}>
-                <ActivityIndicator size="large" color={isDarkMode ? "#B388FF" : "#0e135f"} />
-                <Text style={[styles.loadingTextModal, isDarkMode ? styles.textLight : styles.textDark]}>
-                  Chargement de l'aperçu...
-                </Text>
-              </View>
-            )}
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              console.error("WebView error:", nativeEvent);
-              Alert.alert(
-                "Erreur d'aperçu",
-                "Impossible d'afficher le document. Veuillez réessayer.",
-                [{ text: "OK", onPress: closePreview }]
-              );
-            }}
-            originWhitelist={['*']}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            cacheEnabled={false}
-            androidLayerType="hardware"
-            overScrollMode="never"
-            scrollEnabled={true}
-            bounces={false}
-            injectedJavaScript={`
-              (function() {
-                document.body.style.backgroundColor = '${isDarkMode ? '#121212' : '#FFFFFF'}';
-                document.documentElement.style.backgroundColor = '${isDarkMode ? '#121212' : '#FFFFFF'}';
-                
-                // Force PDF to fit width
-                if (document.querySelector('embed[type="application/pdf"]')) {
-                  document.querySelector('embed[type="application/pdf"]').style.width = '100%';
-                  document.querySelector('embed[type="application/pdf"]').style.height = '100%';
-                }
-                
-                // Force images to fit width
-                const imgs = document.getElementsByTagName('img');
-                for(let i = 0; i < imgs.length; i++) {
-                  imgs[i].style.maxWidth = '100%';
-                  imgs[i].style.height = 'auto';
-                }
-                
-                true;
-              })();
-            `}
-            onMessage={() => {}}
-          />
+          {selectedDocument.mimeType?.startsWith('image/') && imageUri ? (
+            <View style={styles.imagePreviewContainer}>
+              <RNImage source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="contain" />
+            </View>
+          ) : (
+            <WebView
+              source={source}
+              style={styles.webView}
+              startInLoadingState={true}
+              allowsFullscreenVideo={true}
+              allowsInlineMediaPlayback={true}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              mixedContentMode="always"
+              renderLoading={() => (
+                <View style={[styles.webViewLoading, { 
+                  backgroundColor: isDarkMode ? 'rgba(26, 31, 56, 0.9)' : 'rgba(255, 255, 255, 0.9)' 
+                }]}>
+                  <ActivityIndicator size="large" color={isDarkMode ? "#B388FF" : "#0e135f"} />
+                </View>
+              )}
+            />
+          )}
+          
+          <View style={styles.previewActions}>
+            <TouchableOpacity 
+              style={[styles.previewActionButton, { backgroundColor: "#9370DB" }]}
+              onPress={() => handleDownload(selectedDocument)}
+            >
+              <Download size={20} color="#FFFFFF" />
+              <Text style={styles.previewActionButtonText}>Download</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     );
-  }, [previewVisible, selectedDocument, isDarkMode, token, insets, closePreview]);
+  }, [previewVisible, selectedDocument, isDarkMode, token, closePreview, handleDownload, imageUri]);
 
-  // Modify renderDocumentItem
+  // Optimized document item rendering
   const renderDocumentItem: ListRenderItem<Document> = useCallback(
     ({ item }) => (
       <TouchableOpacity
@@ -561,14 +496,10 @@ const DocumentsScreen: React.FC = () => {
         onPress={() => handlePreview(item)}
         activeOpacity={0.8}
       >
-        <View
-          style={[
-            styles.documentIconContainer,
-            isDarkMode
-              ? styles.documentIconContainerDark
-              : styles.documentIconContainerLight,
-          ]}
-        >
+        <View style={[
+          styles.documentIconContainer,
+          isDarkMode ? styles.documentIconContainerDark : styles.documentIconContainerLight,
+        ]}>
           <Feather
             name={getFileIcon(item.mimeType)}
             size={24}
@@ -587,7 +518,6 @@ const DocumentsScreen: React.FC = () => {
             {item.title}
           </Text>
           <View style={styles.documentMetaContainer}>
-
             <Text
               style={[
                 styles.documentMeta,
@@ -604,11 +534,7 @@ const DocumentsScreen: React.FC = () => {
             onPress={() => handlePreview(item)}
             activeOpacity={0.7}
           >
-            <Feather 
-              name="eye" 
-              size={20} 
-              color={isDarkMode ? "#B388FF" : "#0e135f"} 
-            />
+            <Feather name="eye" size={20} color={isDarkMode ? "#B388FF" : "#0e135f"} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
@@ -622,11 +548,7 @@ const DocumentsScreen: React.FC = () => {
             {isLoadingDownload && downloadingItemId === item.id ? (
               <ActivityIndicator size="small" color={isDarkMode ? "#B388FF" : "#0e135f"} />
             ) : (
-              <Feather 
-                name="download-cloud" 
-                size={20} 
-                color={isDarkMode ? "#B388FF" : "#0e135f"} 
-              />
+              <Feather name="download-cloud" size={20} color={isDarkMode ? "#B388FF" : "#0e135f"} />
             )}
           </TouchableOpacity>
         </View>
@@ -635,32 +557,24 @@ const DocumentsScreen: React.FC = () => {
     [isDarkMode, isLoadingDownload, downloadingItemId, getFileIcon, handlePreview, handleDownload, getFileTypeName]
   );
 
-  // Main return
   return (
-    <View
-      style={[
-        styles.container,
-        isDarkMode ? styles.containerDark : styles.containerLight,
-        // For Android, paddingTop for status bar is often handled by themes or if status bar is translucent.
-        // For iOS, SafeAreaView usually handles top inset, but if NavBar is not in SafeAreaProvider, manual insets.top is needed.
-        // Assuming NavBar handles its own safe area or is part of a screen with SafeAreaView.
-        { paddingTop: Platform.OS === 'android' ? insets.top : 0 }, 
-      ]}
-    >
+    <View style={[
+      styles.container,
+      isDarkMode ? styles.containerDark : styles.containerLight,
+      { paddingTop: Platform.OS === 'android' ? insets.top : 0 }, 
+    ]}>
       <NavBar
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
         handleLogout={handleLogout}
       />
 
-      <View style={[styles.content, {paddingTop: 10}] /* Added small paddingTop for content below NavBar */}>
+      <View style={[styles.content, {paddingTop: 10}]}>
         <View style={styles.searchContainer}>
-          <View
-            style={[
-              styles.searchInputContainer,
-              isDarkMode ? styles.searchInputContainerDark : styles.searchInputContainerLight,
-            ]}
-          >
+          <View style={[
+            styles.searchInputContainer,
+            isDarkMode ? styles.searchInputContainerDark : styles.searchInputContainerLight,
+          ]}>
             <Feather
               name="search"
               size={20}
@@ -669,12 +583,12 @@ const DocumentsScreen: React.FC = () => {
             />
             <TextInput
               style={[styles.searchInput, isDarkMode ? styles.textLight : styles.textDark]}
-              placeholder="Rechercher un document..."
+              placeholder="Search documents..."
               placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
               value={searchQuery}
               onChangeText={setSearchQuery}
               returnKeyType="search"
-              clearButtonMode="while-editing" // iOS specific, good UX
+              clearButtonMode="while-editing"
             />
           </View>
         </View>
@@ -683,17 +597,17 @@ const DocumentsScreen: React.FC = () => {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={isDarkMode ? "#B388FF" : "#0e135f"}/>
             <Text style={[styles.statusText, isDarkMode ? styles.textLight : styles.textDark]}>
-              Chargement des documents...
+              Loading documents...
             </Text>
           </View>
         ) : filteredDocuments.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Feather name="file-text" size={50} color={isDarkMode ? "#7986CB" : "#A0A0A0"}/>
             <Text style={[styles.emptyStateTitle, isDarkMode ? styles.textLight : styles.textDark]}>
-              {searchQuery ? "Aucun résultat trouvé" : "Aucun document"}
+              {searchQuery ? "No results found" : "No documents"}
             </Text>
             <Text style={[styles.emptyStateSubtitle, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
-              {searchQuery ? "Essayez une autre recherche ou effacez les filtres." : "Vos documents apparaîtront ici dès qu'ils seront disponibles."}
+              {searchQuery ? "Try another search or clear filters." : "Your documents will appear here when available."}
             </Text>
           </View>
         ) : (
@@ -705,26 +619,13 @@ const DocumentsScreen: React.FC = () => {
             showsVerticalScrollIndicator={false}
             refreshing={isLoading}
             onRefresh={onRefresh}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Feather name="file-text" size={50} color={isDarkMode ? "#7986CB" : "#A0A0A0"}/>
-                <Text style={[styles.emptyStateTitle, isDarkMode ? styles.textLight : styles.textDark]}>
-                  {searchQuery ? "Aucun résultat trouvé" : "Aucun document"}
-                </Text>
-                <Text style={[styles.emptyStateSubtitle, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
-                  {searchQuery ? "Essayez une autre recherche ou effacez les filtres." : "Vos documents apparaîtront ici dès qu'ils seront disponibles."}
-                </Text>
-              </View>
-            }
-            ListFooterComponent={<View style={{ height: insets.bottom + 80 }} />} // Ensure space for footer and some breathing room
+            ListFooterComponent={<View style={{ height: insets.bottom + 80 }} />}
           />
         )}
       </View>
 
-      {renderPreviewModal()}
-      <Footer 
-        // Pass necessary props if Footer is interactive or theme-dependent
-      />
+      {renderPreviewModal}
+      <Footer />
     </View>
   );
 };
@@ -739,35 +640,80 @@ const styles = StyleSheet.create({
   textLightSecondary: { color: "#BDBDBD" },
   textDarkSecondary: { color: "#757575" },
 
-  searchContainer: { paddingBottom: 12 }, // Use paddingBottom instead of Vertical for one-sided spacing
-  searchInputContainer: { flexDirection: "row", alignItems: "center", borderRadius: 25, paddingHorizontal: 15, paddingVertical: Platform.OS === "ios" ? 12 : 10, borderWidth: 1 },
+  searchContainer: { paddingBottom: 12 },
+  searchInputContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    borderRadius: 25, 
+    paddingHorizontal: 15, 
+    paddingVertical: Platform.OS === "ios" ? 12 : 10, 
+    borderWidth: 1 
+  },
   searchInputContainerLight: { backgroundColor: "#FFFFFF", borderColor: "#E0E0E0" },
-  searchInputContainerDark: { backgroundColor: "#1a1f38", borderColor: "#333333" },
+  searchInputContainerDark: { backgroundColor: "#2a2f48", borderColor: "#333333" },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
 
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   statusText: { marginTop: 16, fontSize: 16, fontWeight: "500" },
-  loadingTextModal: { marginTop: 12, fontSize: 15, fontWeight: "500" },
 
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32, paddingBottom: 50 },
-  emptyStateTitle: { fontSize: 18, fontWeight: "600", textAlign: "center", marginTop: 20, marginBottom: 8 },
-  emptyStateSubtitle: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptyContainer: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    paddingHorizontal: 32, 
+    paddingBottom: 50 
+  },
+  emptyStateTitle: { 
+    fontSize: 18, 
+    fontWeight: "600", 
+    textAlign: "center", 
+    marginTop: 20, 
+    marginBottom: 8 
+  },
+  emptyStateSubtitle: { 
+    fontSize: 14, 
+    textAlign: "center", 
+    lineHeight: 20 
+  },
 
   documentsList: { paddingBottom: 20 },
-  documentCard: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, marginBottom: 12, borderRadius: 10, borderWidth: 1 },
-  documentCardLight: { backgroundColor: "#FFFFFF", borderColor: "#E0E0E0", shadowColor: "#000000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
-  documentCardDark: { backgroundColor: "#1a1f38", borderColor: "#333333" },
-  documentIconContainer: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  documentCard: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    marginBottom: 12, 
+    borderRadius: 10, 
+    borderWidth: 1 
+  },
+  documentCardLight: { 
+    backgroundColor: "#FFFFFF", 
+    borderColor: "#E0E0E0", 
+    shadowColor: "#000000", 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 2, 
+    elevation: 2 
+  },
+  documentCardDark: { 
+    backgroundColor: "#2a2f48", 
+    borderColor: "#333333" 
+  },
+  documentIconContainer: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    marginRight: 12 
+  },
   documentIconContainerLight: { backgroundColor: "rgba(14, 19, 95, 0.08)" },
   documentIconContainerDark: { backgroundColor: "rgba(179, 136, 255, 0.15)" },
   documentInfo: { flex: 1, marginRight: 16 },
   documentTitle: { fontSize: 15, fontWeight: "600", marginBottom: 5 },
   documentMetaContainer: { flexDirection: "row", alignItems: "center", flexWrap: 'wrap' },
   documentMeta: { fontSize: 12, opacity: 0.9 },
-  metaDivider: { width: 1, height: 10, marginHorizontal: 6, opacity: 0.5 },
-  metaDividerLight: { backgroundColor: "#BDBDBD" },
-  metaDividerDark: { backgroundColor: "#555555" },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -785,11 +731,19 @@ const styles = StyleSheet.create({
   },
   
   modalContainer: { flex: 1, backgroundColor: 'transparent' },
-  modalContainerLight: { backgroundColor: "#FFFFFF" },
   modalContainerDark: { backgroundColor: "#1a1f38" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  modalHeaderLight: { borderBottomColor: "#E0E0E0" },
-  modalHeaderDark: { borderBottomColor: "#1a1f38" },
+  modalHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    borderBottomWidth: StyleSheet.hairlineWidth 
+  },
+  modalHeaderDark: { 
+    backgroundColor: "#1a1f38",
+    borderBottomColor: "#333333" 
+  },
   modalTitle: { fontSize: 17, fontWeight: "600", flex: 1, marginRight: 16 },
   modalCloseButton: { padding: 8 },
   webView: { 
@@ -807,12 +761,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   
-  unsupportedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  unsupportedText: { fontSize: 16, marginVertical: 20, textAlign: 'center', lineHeight: 22 },
-  actionButtonModal: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, marginTop: 20, borderWidth: 1 },
-  actionButtonModalLight: { backgroundColor: 'rgba(14, 19, 95, 0.1)', borderColor: 'rgba(14, 19, 95, 0.2)' },
-  actionButtonModalDark: { backgroundColor: 'rgba(179, 136, 255, 0.15)', borderColor: 'rgba(179, 136, 255, 0.3)' },
-  actionButtonTextModal: { fontSize: 16, fontWeight: '500' },
+  imagePreviewContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  previewActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  previewActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  previewActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 export default DocumentsScreen;

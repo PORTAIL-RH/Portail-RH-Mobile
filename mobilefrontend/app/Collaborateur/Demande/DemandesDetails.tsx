@@ -22,6 +22,7 @@ import {
   Airplay,
   Archive,
   Eye,
+  AlertTriangle,
 } from "lucide-react-native"
 import { API_CONFIG } from "../../config/apiConfig"
 import AsyncStorage from "@react-native-async-storage/async-storage"
@@ -33,6 +34,7 @@ import WebView from "react-native-webview"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { StyleSheet as RNStyleSheet, ViewStyle, TextStyle } from "react-native"
 import type { Request } from "./Demandes"
+import { Image as RNImage } from 'react-native';
 
 // Get dimensions
 const { width, height } = Dimensions.get("window")
@@ -83,9 +85,7 @@ const formatDate = (dateString: string | undefined): string => {
   }
 }
 
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? 24 : 0;
-console.log('Platform:', Platform.OS);
-console.log('StatusBar Height:', STATUSBAR_HEIGHT);
+const STATUSBAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0;
 
 const DemandesDetails: React.FC<DemandesDetailsProps> = ({
   visible,
@@ -97,15 +97,47 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
   themeStyles,
   renderSafeText,
 }) => {
-  const [previewVisible, setPreviewVisible] = React.useState(false)
-  const [selectedDocument, setSelectedDocument] = React.useState<FileDocument | null>(null)
-  const [isLoadingDownload, setIsLoadingDownload] = React.useState(false)
-  const [downloadingItemId, setDownloadingItemId] = React.useState<string | null>(null)
-  const [userToken, setUserToken] = React.useState<string | null>(null)
+  const [previewVisible, setPreviewVisible] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<FileDocument | null>(null)
+  const [isLoadingDownload, setIsLoadingDownload] = useState(false)
+  const [downloadingItemId, setDownloadingItemId] = useState<string | null>(null)
+  const [userToken, setUserToken] = useState<string | null>(null)
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const insets = useSafeAreaInsets()
+  
+  useEffect(() => {
+    if (selectedDocument?.fileType?.startsWith('image/')) {
+      const loadImage = async () => {
+        try {
+          const tempDir = FileSystem.cacheDirectory;
+          const fileName = selectedDocument.filename.split('/').pop();
+          const localPath = `${tempDir}${fileName}`;
+          
+          // Download the image first
+          const downloadResumable = FileSystem.createDownloadResumable(
+            `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${selectedDocument.fileId}`,
+            localPath,
+            {
+              headers: {
+                'Authorization': `Bearer ${userToken}`,
+              }
+            }
+          );
 
+          const { uri } = await downloadResumable.downloadAsync();
+          setImageUri(uri);
+        } catch (error) {
+          console.error('Error loading image:', error);
+        }
+      };
+
+      loadImage();
+    }
+  }, [selectedDocument, userToken]);
+  
   // Load token on component mount
-  React.useEffect(() => {
+  useEffect(() => {
     const loadToken = async () => {
       const token = await AsyncStorage.getItem("userToken")
       setUserToken(token)
@@ -113,7 +145,7 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
     loadToken()
   }, [])
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (selectedRequest?.details) {
       console.log('Documents in request:', {
         documents: selectedRequest.details.documents,
@@ -138,28 +170,28 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
     const lowerCaseType = typeString.toLowerCase()
 
     if (lowerCaseType.includes("congé")) {
-      return <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+      return <Calendar size={24} color={isDarkMode ? "#B388FF" : "#9370DB"} />
     } else if (lowerCaseType.includes("formation")) {
-      return <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
+      return <GraduationCap size={24} color={isDarkMode ? "#64B5F6" : "#2196F3"} />
     } else if (lowerCaseType.includes("document")) {
-      return <FileText size={24} color={isDarkMode ? "#607D8B" : "#607D8B"} />
+      return <FileText size={24} color={isDarkMode ? "#90A4AE" : "#607D8B"} />
     } else if (lowerCaseType.includes("pre-avance")) {
-      return <DollarSign size={24} color={isDarkMode ? "#FF9800" : "#FF9800"} />
+      return <DollarSign size={24} color={isDarkMode ? "#FFB74D" : "#FF9800"} />
     } else if (lowerCaseType.includes("autorisation")) {
-      return <Shield size={24} color={isDarkMode ? "#673AB7" : "#673AB7"} />
+      return <Shield size={24} color={isDarkMode ? "#9575CD" : "#673AB7"} />
     } else {
-      return <FileText size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
+      return <FileText size={24} color={isDarkMode ? "#64B5F6" : "#2196F3"} />
     }
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "approved":
-        return <CheckCircle size={18} color="#4CAF50" />
+        return <CheckCircle size={18} color={isDarkMode ? "#66BB6A" : "#4CAF50"} />
       case "rejected":
-        return <XCircle size={18} color="#F44336" />
+        return <XCircle size={18} color={isDarkMode ? "#EF5350" : "#F44336"} />
       case "pending":
-        return <Clock size={18} color="#FFC107" />
+        return <Clock size={18} color={isDarkMode ? "#FFCA28" : "#FFC107"} />
       default:
         return null
     }
@@ -168,13 +200,13 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
   const getStatusColor = (status: string) => {
     switch (status) {
       case "approved":
-        return "#4CAF50"
+        return isDarkMode ? "#66BB6A" : "#4CAF50"
       case "rejected":
-        return "#F44336"
+        return isDarkMode ? "#EF5350" : "#F44336"
       case "pending":
-        return "#FFC107"
+        return isDarkMode ? "#FFCA28" : "#FFC107"
       default:
-        return "#9370DB"
+        return isDarkMode ? "#B388FF" : "#9370DB"
     }
   }
 
@@ -311,495 +343,496 @@ const DemandesDetails: React.FC<DemandesDetailsProps> = ({
     return 'application/octet-stream';
   };
 
-// Update performActualDownload to log more details
-const performActualDownload = useCallback(
-  async (document: FileDocument) => {
-    if (!userToken) {
-      Alert.alert("Erreur d'authentification", "Token manquant. Impossible de télécharger.");
-      setIsLoadingDownload(false);
-      setDownloadingItemId(null);
-      return;
-    }
-
-    try {
-      const tempDirectory = FileSystem.cacheDirectory;
-      if (!tempDirectory) {
-        throw new Error("Cannot access cache directory");
-      }
-
-      const safeFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const downloadPath = `${tempDirectory}${safeFilename}`;
-
-      // Use the download-specific endpoint
-      const downloadUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${document.fileId}`;
-
-      console.log('Download attempt details:', {
-        document: {
-          id: document.id,
-          fileId: document.fileId,
-          filename: document.filename,
-          fileType: document.fileType
-        },
-        url: downloadUrl,
-        path: downloadPath,
-        token: userToken ? 'Present' : 'Missing'
-      });
-
-      const downloadResumable = FileSystem.createDownloadResumable(
-        downloadUrl,
-        downloadPath,
-        {
-          headers: { 
-            'Authorization': `Bearer ${userToken}`,
-            'Accept': '*/*',
-          },
-        },
-        (downloadProgress) => {
-          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-          console.log(`Download progress: ${(progress * 100).toFixed(2)}%`);
-        }
-      );
-
-      const result = await downloadResumable.downloadAsync();
-      console.log('Download result:', {
-        status: result?.status,
-        uri: result?.uri,
-        headers: result?.headers,
-        mimeType: result?.mimeType
-      });
-
-      if (!result?.uri) {
-        throw new Error("Download failed - no URI received");
-      }
-
-      if (result.status !== 200) {
-        let errorMessage = "Une erreur est survenue lors du téléchargement.";
-        if (result.status === 404) {
-          errorMessage = "Le fichier n'existe plus sur le serveur.";
-        } else if (result.status === 403) {
-          errorMessage = "Vous n'avez pas les droits pour télécharger ce fichier.";
-        } else if (result.status === 401) {
-          errorMessage = "Session expirée. Veuillez vous reconnecter.";
-        }
-        Alert.alert("Erreur", errorMessage);
-        throw new Error(`Download failed with status ${result.status}`);
-      }
-
-      // Verify the downloaded file exists
-      const fileInfo = await FileSystem.getInfoAsync(result.uri);
-      if (!fileInfo.exists || fileInfo.size === 0) {
-        throw new Error("Downloaded file is empty or does not exist");
-      }
-
-      await openFile(result.uri, document.fileType);
-
-      Toast.show({
-        type: "success",
-        text1: "Succès",
-        text2: "Fichier téléchargé avec succès",
-        visibilityTime: 2000,
-      });
-    } catch (error: unknown) {
-      console.error("Download error details:", {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        document: {
-          id: document.id,
-          fileId: document.fileId,
-          filename: document.filename
-        }
-      });
-      if (error instanceof Error && error.message.includes("token expired")) {
-        Alert.alert(
-          "Session expirée",
-          "Votre session a expiré. Veuillez vous reconnecter.",
-          [{ text: "OK" }]
-        );
+  // Update performActualDownload to log more details
+  const performActualDownload = useCallback(
+    async (document: FileDocument) => {
+      if (!userToken) {
+        Alert.alert("Erreur d'authentification", "Token manquant. Impossible de télécharger.");
+        setIsLoadingDownload(false);
+        setDownloadingItemId(null);
         return;
       }
+
+      try {
+        const tempDirectory = FileSystem.cacheDirectory;
+        if (!tempDirectory) {
+          throw new Error("Cannot access cache directory");
+        }
+
+        const safeFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const downloadPath = `${tempDirectory}${safeFilename}`;
+
+        // Use the proper API endpoint
+        const downloadUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${document.fileId}`;
+
+        console.log('Download attempt details:', {
+          document,
+          url: downloadUrl,
+          path: downloadPath
+        });
+
+        const downloadResumable = FileSystem.createDownloadResumable(
+          downloadUrl,
+          downloadPath,
+          {
+            headers: { 
+              'Authorization': `Bearer ${userToken}`,
+              'Accept': '*/*',
+            },
+          },
+          (downloadProgress) => {
+            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+            console.log(`Download progress: ${(progress * 100).toFixed(2)}%`);
+          }
+        );
+
+        const result = await downloadResumable.downloadAsync();
+        
+        if (!result?.uri) {
+          throw new Error("Download failed - no URI received");
+        }
+
+        // For Android, we need to use a content URI
+        if (Platform.OS === 'android') {
+          const contentUri = await FileSystem.getContentUriAsync(result.uri);
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: contentUri,
+            flags: 1,
+            type: document.fileType,
+          });
+        } else {
+          // iOS handling remains the same
+          await shareAsync(result.uri, {
+            mimeType: document.fileType,
+            UTI: document.fileType,
+            dialogTitle: "Ouvrir le document",
+          });
+        }
+
+        Toast.show({
+          type: "success",
+          text1: "Succès",
+          text2: "Fichier téléchargé avec succès",
+          visibilityTime: 2000,
+        });
+      } catch (error) {
+        console.error("Download error:", error);
+        Alert.alert(
+          "Erreur",
+          "Impossible de télécharger le fichier. Veuillez réessayer."
+        );
+      } finally {
+        setIsLoadingDownload(false);
+        setDownloadingItemId(null);
+      }
+    },
+    [userToken]
+  );
+
+  // Helper function to create a FileDocument from a string
+  const createFileDocumentFromString = (input: string): FileDocument => ({
+    id: input,
+    filename: input,
+    fileType: input.toLowerCase().endsWith('.pdf') 
+      ? 'application/pdf' 
+      : input.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/) 
+        ? `image/${input.split('.').pop()}`
+        : 'application/octet-stream',
+    fileId: input
+  });
+
+  // Add function to fetch file details from server
+  const fetchFileDetails = async (filename: string, isResponse: boolean): Promise<FileDocument | null> => {
+    try {
+      const endpoint = isResponse 
+        ? `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-document/personnel/${selectedRequest.id}/files-reponse`
+        : `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-document/personnel/${selectedRequest.id}/files`;
+
+      console.log('Fetching file details:', {
+        endpoint,
+        filename,
+        isResponse,
+        requestId: selectedRequest.id
+      });
+
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file details: ${response.status}`);
+      }
+
+      const files = await response.json();
+      console.log('Raw server response:', files);
+
+      // Find the file by filename and extract its ID
+      const file = files.find((f: any) => f.filename === filename);
+      console.log('Found file details:', file);
+
+      if (file) {
+        // Log the exact structure we're working with
+        console.log('File structure from server:', {
+          id: file.id,
+          _id: file._id,
+          fileId: file.fileId,
+          filename: file.filename,
+          originalFilename: file.originalFilename
+        });
+
+        // Try to get the correct ID from various possible fields
+        const fileId = file._id || file.id || file.fileId;
+        
+        if (!fileId) {
+          console.warn('No file ID found in server response');
+        }
+
+        return {
+          id: fileId || filename,
+          filename: file.filename || filename,
+          fileType: file.fileType || getFileTypeFromFilename(file.filename || filename),
+          fileId: fileId || filename
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching file details:', error);
+      return null;
+    }
+  };
+
+  // Helper function to check if a filename is in the response files
+  const isFileInResponse = (filename: string): boolean => {
+    if (!selectedRequest.details.filesReponse) return false;
+    return selectedRequest.details.filesReponse.some(file => 
+      typeof file === 'string' 
+        ? file === filename 
+        : file.filename === filename
+    );
+  };
+
+  // Update handleDownload to ensure we have the correct fileId
+  const handleDownload = useCallback(async (doc: DocumentInput) => {
+    try {
+      setIsLoadingDownload(true);
+      const isResponse = isFileInResponse(typeof doc === 'string' ? doc : doc.filename);
+      
+      let document: FileDocument;
+      if (typeof doc === 'string') {
+        // Try to get the file details from the server first
+        const fileDetails = await fetchFileDetails(doc, isResponse);
+        if (fileDetails) {
+          document = fileDetails;
+        } else {
+          // If we can't get the ID from server, try to find it in the request details
+          const files = isResponse ? selectedRequest.details.filesReponse : selectedRequest.details.documents;
+          const matchingFile = files?.find((f: any) => 
+            typeof f === 'string' ? f === doc : f.filename === doc
+          );
+          
+          if (matchingFile && typeof matchingFile !== 'string') {
+            document = {
+              id: matchingFile.id || doc,
+              filename: doc,
+              fileType: getFileTypeFromFilename(doc),
+              fileId: matchingFile.id || doc
+            };
+          } else {
+            document = {
+              id: doc,
+              filename: doc,
+              fileType: getFileTypeFromFilename(doc),
+              fileId: doc
+            };
+          }
+        }
+      } else {
+        document = doc;
+      }
+      
+      if (!document.fileId) {
+        throw new Error('No fileId available for download');
+      }
+      
+      console.log('Downloading file with details:', document);
+      
+      setDownloadingItemId(document.id);
+      await performActualDownload(document);
+    } catch (error) {
+      console.error('Error in handleDownload:', error);
       Alert.alert(
-        "Erreur de téléchargement",
-        "Impossible de télécharger le document. Veuillez réessayer plus tard.",
-        [{ text: "OK" }]
+        "Erreur",
+        "Impossible de télécharger le document. Veuillez réessayer plus tard."
       );
     } finally {
       setIsLoadingDownload(false);
       setDownloadingItemId(null);
     }
-  },
-  [userToken, openFile, selectedRequest.id]
-);
+  }, [performActualDownload, selectedRequest.details, selectedRequest.id, userToken]);
 
-// Helper function to create a FileDocument from a string
-const createFileDocumentFromString = (input: string): FileDocument => ({
-  id: input,
-  filename: input,
-  fileType: input.toLowerCase().endsWith('.pdf') 
-    ? 'application/pdf' 
-    : input.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/) 
-      ? `image/${input.split('.').pop()}`
-      : 'application/octet-stream',
-  fileId: input
-});
-
-// Add function to fetch file details from server
-const fetchFileDetails = async (filename: string, isResponse: boolean): Promise<FileDocument | null> => {
-  try {
-    const endpoint = isResponse 
-      ? `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-document/personnel/${selectedRequest.id}/files-reponse`
-      : `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-document/personnel/${selectedRequest.id}/files`;
-
-    console.log('Fetching file details:', {
-      endpoint,
-      filename,
-      isResponse,
-      requestId: selectedRequest.id
-    });
-
-    const response = await fetch(endpoint, {
-      headers: {
-        'Authorization': `Bearer ${userToken}`,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch file details: ${response.status}`);
-    }
-
-    const files = await response.json();
-    console.log('Raw server response:', files);
-
-    // Find the file by filename and extract its ID
-    const file = files.find((f: any) => f.filename === filename);
-    console.log('Found file details:', file);
-
-    if (file) {
-      // Log the exact structure we're working with
-      console.log('File structure from server:', {
-        id: file.id,
-        _id: file._id,
-        fileId: file.fileId,
-        filename: file.filename,
-        originalFilename: file.originalFilename
-      });
-
-      // Try to get the correct ID from various possible fields
-      const fileId = file._id || file.id || file.fileId;
+  // Update handlePreview similarly
+  const handlePreview = useCallback(async (doc: DocumentInput) => {
+    try {
+      const isResponse = isFileInResponse(typeof doc === 'string' ? doc : doc.filename);
       
-      if (!fileId) {
-        console.warn('No file ID found in server response');
-      }
-
-      return {
-        id: fileId || filename,
-        filename: file.filename || filename,
-        fileType: file.fileType || getFileTypeFromFilename(file.filename || filename),
-        fileId: fileId || filename
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error fetching file details:', error);
-    return null;
-  }
-};
-
-// Helper function to check if a filename is in the response files
-const isFileInResponse = (filename: string): boolean => {
-  if (!selectedRequest.details.filesReponse) return false;
-  return selectedRequest.details.filesReponse.some(file => 
-    typeof file === 'string' 
-      ? file === filename 
-      : file.filename === filename
-  );
-};
-
-// Update handleDownload to ensure we have the correct fileId
-const handleDownload = useCallback(async (doc: DocumentInput) => {
-  try {
-    setIsLoadingDownload(true);
-    const isResponse = isFileInResponse(typeof doc === 'string' ? doc : doc.filename);
-    
-    let document: FileDocument;
-    if (typeof doc === 'string') {
-      // Try to get the file details from the server first
-      const fileDetails = await fetchFileDetails(doc, isResponse);
-      if (fileDetails) {
-        document = fileDetails;
-      } else {
-        // If we can't get the ID from server, try to find it in the request details
-        const files = isResponse ? selectedRequest.details.filesReponse : selectedRequest.details.documents;
-        const matchingFile = files?.find((f: any) => 
-          typeof f === 'string' ? f === doc : f.filename === doc
-        );
-        
-        if (matchingFile && typeof matchingFile !== 'string') {
-          document = {
-            id: matchingFile.id || doc,
-            filename: doc,
-            fileType: getFileTypeFromFilename(doc),
-            fileId: matchingFile.id || doc
-          };
+      let document: FileDocument;
+      if (typeof doc === 'string') {
+        // Try to get the file details from the server first
+        const fileDetails = await fetchFileDetails(doc, isResponse);
+        if (fileDetails) {
+          document = fileDetails;
         } else {
-          document = {
-            id: doc,
-            filename: doc,
-            fileType: getFileTypeFromFilename(doc),
-            fileId: doc
-          };
+          // If we can't get the ID from server, try to find it in the request details
+          const files = isResponse ? selectedRequest.details.filesReponse : selectedRequest.details.documents;
+          const matchingFile = files?.find((f: any) => 
+            typeof f === 'string' ? f === doc : f.filename === doc
+          );
+          
+          if (matchingFile && typeof matchingFile !== 'string') {
+            document = {
+              id: matchingFile.id || doc,
+              filename: doc,
+              fileType: getFileTypeFromFilename(doc),
+              fileId: matchingFile.id || doc
+            };
+          } else {
+            document = {
+              id: doc,
+              filename: doc,
+              fileType: getFileTypeFromFilename(doc),
+              fileId: doc
+            };
+          }
         }
-      }
-    } else {
-      document = doc;
-    }
-    
-    if (!document.fileId) {
-      throw new Error('No fileId available for download');
-    }
-    
-    console.log('Downloading file with details:', document);
-    
-    setDownloadingItemId(document.id);
-    await performActualDownload(document);
-  } catch (error) {
-    console.error('Error in handleDownload:', error);
-    Alert.alert(
-      "Erreur",
-      "Impossible de télécharger le document. Veuillez réessayer plus tard."
-    );
-  } finally {
-    setIsLoadingDownload(false);
-    setDownloadingItemId(null);
-  }
-}, [performActualDownload, selectedRequest.details, selectedRequest.id, userToken]);
-
-// Update handlePreview similarly
-const handlePreview = useCallback(async (doc: DocumentInput) => {
-  try {
-    const isResponse = isFileInResponse(typeof doc === 'string' ? doc : doc.filename);
-    
-    let document: FileDocument;
-    if (typeof doc === 'string') {
-      // Try to get the file details from the server first
-      const fileDetails = await fetchFileDetails(doc, isResponse);
-      if (fileDetails) {
-        document = fileDetails;
       } else {
-        // If we can't get the ID from server, try to find it in the request details
-        const files = isResponse ? selectedRequest.details.filesReponse : selectedRequest.details.documents;
-        const matchingFile = files?.find((f: any) => 
-          typeof f === 'string' ? f === doc : f.filename === doc
-        );
-        
-        if (matchingFile && typeof matchingFile !== 'string') {
-          document = {
-            id: matchingFile.id || doc,
-            filename: doc,
-            fileType: getFileTypeFromFilename(doc),
-            fileId: matchingFile.id || doc
-          };
-        } else {
-          document = {
-            id: doc,
-            filename: doc,
-            fileType: getFileTypeFromFilename(doc),
-            fileId: doc
-          };
-        }
+        document = doc;
       }
-    } else {
-      document = doc;
+      
+      if (!document.fileId) {
+        throw new Error('No fileId available for preview');
+      }
+      
+      console.log('Previewing file with details:', document);
+      
+      setSelectedDocument(document);
+      setPreviewVisible(true);
+    } catch (error) {
+      console.error('Error in handlePreview:', error);
+      Alert.alert(
+        "Erreur",
+        "Impossible d'afficher l'aperçu du document. Veuillez réessayer plus tard."
+      );
     }
-    
-    if (!document.fileId) {
-      throw new Error('No fileId available for preview');
-    }
-    
-    console.log('Previewing file with details:', document);
-    
-    setSelectedDocument(document);
-    setPreviewVisible(true);
-  } catch (error) {
-    console.error('Error in handlePreview:', error);
-    Alert.alert(
-      "Erreur",
-      "Impossible d'afficher l'aperçu du document. Veuillez réessayer plus tard."
-    );
-  }
-}, [selectedRequest.details, selectedRequest.id, userToken]);
+  }, [selectedRequest.details, selectedRequest.id, userToken]);
 
   const closePreview = useCallback(() => {
     setPreviewVisible(false)
     setSelectedDocument(null)
+    setImageUri(null)
   }, [])
 
+  // Handle delete confirmation
+  const handleDeleteRequest = useCallback(() => {
+    setDeleteConfirmVisible(true);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    setDeleteConfirmVisible(false);
+    onDelete(selectedRequest.id, selectedRequest.type);
+  }, [selectedRequest, onDelete]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirmVisible(false);
+  }, []);
+
+  const renderDeleteConfirmModal = useCallback(() => {
+    return (
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelDelete}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={[
+            styles.confirmModalContainer,
+            isDarkMode ? styles.confirmModalContainerDark : styles.confirmModalContainerLight
+          ]}>
+            <View style={styles.confirmModalIconContainer}>
+              <AlertTriangle size={40} color={isDarkMode ? "#EF5350" : "#F44336"} />
+            </View>
+            
+            <Text style={[
+              styles.confirmModalTitle,
+              isDarkMode ? styles.textLight : styles.textDark
+            ]}>
+              Supprimer la demande
+            </Text>
+            
+            <Text style={[
+              styles.confirmModalMessage,
+              isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+            ]}>
+              Êtes-vous sûr de vouloir supprimer cette demande ? Cette action est irréversible.
+            </Text>
+            
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalButton,
+                  styles.confirmModalCancelButton,
+                  isDarkMode ? styles.confirmModalCancelButtonDark : styles.confirmModalCancelButtonLight
+                ]}
+                onPress={cancelDelete}
+              >
+                <Text style={[
+                  styles.confirmModalButtonText,
+                  isDarkMode ? styles.confirmModalCancelTextDark : styles.confirmModalCancelTextLight
+                ]}>
+                  Annuler
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalButton,
+                  styles.confirmModalDeleteButton,
+                  isDarkMode ? styles.confirmModalDeleteButtonDark : {}
+                ]}
+                onPress={confirmDelete}
+              >
+                <Text style={styles.confirmModalDeleteText}>
+                  Supprimer
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }, [deleteConfirmVisible, isDarkMode, cancelDelete, confirmDelete]);
+
   const renderPreviewModal = useCallback(() => {
-    if (!selectedDocument || !userToken) return null
+    if (!selectedDocument || !userToken) return null;
 
-    const webViewLoadingBackgroundColor = isDarkMode ? "rgba(26, 31, 56, 0.9)" : "rgba(255, 255, 255, 0.9)"
-
-    // Use the preview-specific endpoint
-    const previewUrl = `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${selectedDocument.fileId}`
+    // Decode the filename for display
+    const decodedFilename = decodeURIComponent(selectedDocument.filename);
     
-    console.log('Preview URL:', {
-      url: previewUrl,
-      fileId: selectedDocument.fileId,
-      requestId: selectedRequest.id,
-      filename: selectedDocument.filename
-    })
-
-    const webViewSource = {
-      uri: previewUrl,
+    // Create the source object with headers
+    const source = {
+      uri: `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/files/download/${selectedDocument.fileId}`,
       headers: {
         'Authorization': `Bearer ${userToken}`,
-        'Accept': '*/*',
-      },
-    }
-
-    const getContentStyle = () => {
-      if (selectedDocument.fileType?.startsWith('image/')) {
-        return `
-          <style>
-            body {
-              margin: 0;
-              padding: 0;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              min-height: 100vh;
-              background-color: ${isDarkMode ? '#121212' : '#FFFFFF'};
-            }
-            img {
-              max-width: 100%;
-              max-height: 100vh;
-              object-fit: contain;
-            }
-          </style>
-        `
+        'Accept': selectedDocument.fileType,
       }
-      return ''
-    }
+    };
 
     return (
-      <Modal visible={previewVisible} animationType="slide" onRequestClose={closePreview} transparent={false}>
-        <View
-          style={[
-            styles.modalContainer,
-            isDarkMode ? styles.modalContainerDark : styles.modalContainerLight,
-            { paddingTop: insets.top },
-          ]}
-        >
-          <View style={[styles.modalHeader, isDarkMode ? styles.modalHeaderDark : styles.modalHeaderLight]}>
-            <Text
-              style={[styles.modalTitle, isDarkMode ? styles.textLight : styles.textDark]}
-              numberOfLines={1}
-              ellipsizeMode="middle"
-            >
-              {selectedDocument.filename}
+      <Modal visible={previewVisible} animationType="slide" onRequestClose={closePreview}>
+        <View style={[styles.modalContainer, isDarkMode && styles.modalContainerDark]}>
+          <View style={[styles.modalHeader, isDarkMode && styles.modalHeaderDark]}>
+            <Text style={[styles.modalTitle, isDarkMode ? styles.textLight : styles.textDark]} numberOfLines={1}>
+              {decodedFilename}
             </Text>
-            <TouchableOpacity onPress={closePreview} style={styles.modalCloseButton}>
+            <TouchableOpacity 
+              onPress={closePreview} 
+              style={styles.modalCloseButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <X size={28} color={isDarkMode ? "#E0E0E0" : "#555555"} />
             </TouchableOpacity>
           </View>
 
-          <WebView
-            key={`${selectedDocument.id}-${userToken}-${Date.now()}`}
-            source={webViewSource}
-            style={[styles.webView, { backgroundColor: isDarkMode ? "#121212" : "#FFFFFF" }]}
-            containerStyle={{ flex: 1, backgroundColor: isDarkMode ? "#121212" : "#FFFFFF" }}
-            startInLoadingState={true}
-            renderLoading={() => (
-              <View style={[styles.webViewLoading, { backgroundColor: webViewLoadingBackgroundColor }]}>
-                <ActivityIndicator size="large" color={isDarkMode ? "#B388FF" : "#0e135f"} />
-                <Text style={[styles.loadingTextModal, isDarkMode ? styles.textLight : styles.textDark]}>
-                  Chargement de l'aperçu...
-                </Text>
-              </View>
-            )}
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent
-              console.error("WebView error:", nativeEvent)
-              Alert.alert(
-                "Erreur d'aperçu",
-                "Impossible d'afficher le document. Voulez-vous le télécharger ?",
-                [
-                  { text: "Annuler", style: "cancel" },
-                  { 
-                    text: "Télécharger",
-                    onPress: () => {
-                      closePreview()
-                      handleDownload(selectedDocument)
+          {selectedDocument.fileType?.startsWith('image/') && imageUri ? (
+            <View style={styles.imagePreviewContainer}>
+              <RNImage 
+                source={{ uri: imageUri }} 
+                style={styles.imagePreview} 
+                resizeMode="contain"
+              />
+            </View>
+          ) : (
+            <WebView
+              source={source}
+              style={styles.webView}
+              startInLoadingState={true}
+              allowsFullscreenVideo={true}
+              allowsInlineMediaPlayback={true}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              mixedContentMode="always"
+              renderLoading={() => (
+                <View style={[styles.webViewLoading, { 
+                  backgroundColor: isDarkMode ? 'rgba(26, 31, 56, 0.9)' : 'rgba(255, 255, 255, 0.9)' 
+                }]}>
+                  <ActivityIndicator size="large" color={isDarkMode ? "#B388FF" : "#9370DB"} />
+                </View>
+              )}
+              onError={(syntheticEvent) => {
+                console.error("WebView error:", syntheticEvent.nativeEvent);
+                Alert.alert(
+                  "Erreur",
+                  "Impossible d'afficher le document. Essayez de le télécharger.",
+                  [
+                    { text: "Annuler", style: "cancel" },
+                    { 
+                      text: "Télécharger",
+                      onPress: () => handleDownload(selectedDocument)
                     }
-                  }
-                ]
-              )
-            }}
-            onLoadEnd={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent
-              if (nativeEvent.loading === false) {
-                console.log('Preview loaded successfully')
-                Toast.show({
-                  type: "success",
-                  text1: "Succès",
-                  text2: "Document chargé avec succès",
-                  visibilityTime: 2000,
-                })
-              }
-            }}
-            originWhitelist={["*"]}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            cacheEnabled={false}
-            androidLayerType="hardware"
-            overScrollMode="never"
-            scrollEnabled={true}
-            bounces={false}
-            injectedJavaScript={`
-              (function() {
-                ${getContentStyle()}
-                document.body.style.backgroundColor = '${isDarkMode ? "#121212" : "#FFFFFF"}';
-                document.documentElement.style.backgroundColor = '${isDarkMode ? "#121212" : "#FFFFFF"}';
-                
-                // Handle PDFs
-                if (document.querySelector('embed[type="application/pdf"]')) {
-                  document.querySelector('embed[type="application/pdf"]').style.width = '100%';
-                  document.querySelector('embed[type="application/pdf"]').style.height = '100%';
-                }
-                
-                // Handle images
-                const imgs = document.getElementsByTagName('img');
-                for(let i = 0; i < imgs.length; i++) {
-                  imgs[i].style.maxWidth = '100%';
-                  imgs[i].style.maxHeight = '100vh';
-                  imgs[i].style.objectFit = 'contain';
-                  imgs[i].style.display = 'block';
-                  imgs[i].style.margin = '0 auto';
-                }
-                
-                true;
-              })();
-            `}
-            onMessage={() => {}}
-          />
+                  ]
+                );
+              }}
+              onHttpError={(syntheticEvent) => {
+                console.error("HTTP error:", syntheticEvent.nativeEvent);
+              }}
+            />
+          )}
+          
+          <View style={[
+            styles.previewActions,
+            isDarkMode ? styles.previewActionsDark : styles.previewActionsLight
+          ]}>
+            <TouchableOpacity 
+              style={[
+                styles.previewActionButton, 
+                { backgroundColor: isDarkMode ? "#B388FF" : "#9370DB" }
+              ]}
+              onPress={() => handleDownload(selectedDocument)}
+            >
+              <Download size={20} color="#FFFFFF" />
+              <Text style={styles.previewActionButtonText}>Télécharger</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
-    )
-  }, [previewVisible, selectedDocument, isDarkMode, userToken, insets, closePreview, handleDownload, selectedRequest.id])
+    );
+  }, [previewVisible, selectedDocument, isDarkMode, userToken, closePreview, handleDownload, imageUri]);
 
   // Fix text node error in renderDocument
   const renderDocument = useCallback((doc: DocumentInput, isResponse: boolean) => {
     const FileIcon = getFileIcon(typeof doc === 'object' ? doc.fileType : getFileTypeFromFilename(doc));
     const isDownloading = isLoadingDownload && downloadingItemId === (typeof doc === 'object' ? doc.id : doc);
+    const filename = typeof doc === 'object' ? doc.filename : doc;
+    const displayName = decodeURIComponent(filename).split('/').pop() || filename;
 
     return (
-      <View style={styles.documentListItem} key={typeof doc === 'object' ? doc.id : doc}>
+      <View style={[
+        styles.documentListItem, 
+        isDarkMode ? styles.documentListItemDark : styles.documentListItemLight
+      ]} key={typeof doc === 'object' ? doc.id : doc}>
         <View style={styles.documentItemLeft}>
-          <View style={styles.documentIcon}>
-            <FileIcon size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+          <View style={[
+            styles.documentIcon,
+            isDarkMode ? styles.documentIconDark : styles.documentIconLight
+          ]}>
+            <FileIcon size={24} color={isDarkMode ? "#B388FF" : "#9370DB"} />
           </View>
           <View style={styles.documentInfo}>
             <Text style={[styles.documentName, themeStyles.text]} numberOfLines={1}>
-              {typeof doc === 'object' ? doc.filename : doc}
+              {displayName}
             </Text>
             <Text style={[styles.documentType, themeStyles.subtleText]}>
               {typeof doc === 'object' ? getFileTypeName(doc.fileType) : getFileTypeName(getFileTypeFromFilename(doc))}
@@ -808,27 +841,35 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
         </View>
         <View style={styles.documentActionsContainer}>
           {isDownloading ? (
-            <ActivityIndicator size="small" color="#9370DB" />
+            <ActivityIndicator size="small" color={isDarkMode ? "#B388FF" : "#9370DB"} />
           ) : (
             <>
               <TouchableOpacity
-                style={styles.documentAction}
+                style={[
+                  styles.documentAction,
+                  isDarkMode ? styles.documentActionDark : styles.documentActionLight
+                ]}
                 onPress={() => handleDownload(doc)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Download size={20} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+                <Download size={20} color={isDarkMode ? "#B388FF" : "#9370DB"} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.documentAction}
+                style={[
+                  styles.documentAction,
+                  isDarkMode ? styles.documentActionDark : styles.documentActionLight
+                ]}
                 onPress={() => handlePreview(doc)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Eye size={20} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+                <Eye size={20} color={isDarkMode ? "#B388FF" : "#9370DB"} />
               </TouchableOpacity>
             </>
           )}
         </View>
       </View>
     );
-  }, [isLoadingDownload, downloadingItemId, isDarkMode, themeStyles]);
+  }, [isLoadingDownload, downloadingItemId, isDarkMode, themeStyles, handleDownload, handlePreview]);
 
   const renderContent = () => {
     const renderMainContent = () => (
@@ -1057,7 +1098,7 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
 
           <View style={styles.timelineContainer}>
             <View style={[styles.timelineItem]}>
-              <View style={[styles.timelineDot, { backgroundColor: "#9370DB" }]} />
+              <View style={[styles.timelineDot, { backgroundColor: isDarkMode ? "#B388FF" : "#9370DB" }]} />
               <View style={styles.timelineContent}>
                 <Text style={[styles.timelineTitle, themeStyles.text]}>Demande soumise</Text>
                 <Text style={[styles.timelineDate, themeStyles.subtleText]}>
@@ -1084,7 +1125,7 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
 
             {selectedRequest.status === "pending" && (
               <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: "#FFC107" }]} />
+                <View style={[styles.timelineDot, { backgroundColor: isDarkMode ? "#FFCA28" : "#FFC107" }]} />
                 <View style={styles.timelineContent}>
                   <Text style={[styles.timelineTitle, themeStyles.text]}>En attente d'approbation</Text>
                   <Text style={[styles.timelineDate, themeStyles.subtleText]}>En cours de traitement</Text>
@@ -1095,12 +1136,22 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
         </View>
 
         {/* Actions */}
-        <View style={[styles.detailsActions, themeStyles.card]}>
+        <View style={[
+          styles.detailsActions, 
+          themeStyles.card,
+          isDarkMode ? styles.detailsActionsDark : {}
+        ]}>
           <TouchableOpacity 
-            style={[styles.detailsActionButton, themeStyles.detailsActionButton]} 
+            style={[
+              styles.detailsActionButton, 
+              isDarkMode ? styles.detailsActionButtonDark : themeStyles.detailsActionButton
+            ]} 
             onPress={onClose}
           >
-            <Text style={[styles.detailsActionButtonText, themeStyles.detailsActionButtonText]}>
+            <Text style={[
+              styles.detailsActionButtonText, 
+              isDarkMode ? styles.detailsActionButtonTextDark : themeStyles.detailsActionButtonText
+            ]}>
               Fermer
             </Text>
           </TouchableOpacity>
@@ -1111,7 +1162,7 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
                 style={[
                   styles.detailsActionButton, 
                   { 
-                    backgroundColor: "#9370DB",
+                    backgroundColor: isDarkMode ? "#B388FF" : "#9370DB",
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1130,14 +1181,14 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
                 style={[
                   styles.detailsActionButton, 
                   { 
-                    backgroundColor: "#F44336",
+                    backgroundColor: isDarkMode ? "#EF5350" : "#F44336",
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 8
                   }
                 ]}
-                onPress={() => onDelete(selectedRequest.id, selectedRequest.type)}
+                onPress={handleDeleteRequest}
               >
                 <Trash size={20} color="#FFFFFF" />
                 <Text style={styles.detailsActionButtonText}>
@@ -1153,10 +1204,21 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
     // iOS layout
     if (Platform.OS === "ios") {
       return (
-        <View style={[styles.detailsModalContainer, themeStyles.container]}>
+        <View style={[
+          styles.detailsModalContainer, 
+          isDarkMode ? styles.detailsModalContainerDark : styles.detailsModalContainerLight
+        ]}>
           {renderPreviewModal()}
-          <View style={[styles.detailsModalHeader, themeStyles.card]}>
-            <TouchableOpacity style={styles.backButton} onPress={onClose}>
+          {renderDeleteConfirmModal()}
+          <View style={[
+            styles.detailsModalHeader, 
+            isDarkMode ? styles.detailsModalHeaderDark : themeStyles.card
+          ]}>
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={onClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
             </TouchableOpacity>
             <Text style={[styles.detailsModalTitle, themeStyles.text]}>Détails de la demande</Text>
@@ -1164,7 +1226,10 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
           </View>
 
           <ScrollView
-            style={styles.detailsScrollContainer}
+            style={[
+              styles.detailsScrollContainer,
+              isDarkMode ? styles.detailsScrollContainerDark : {}
+            ]}
             contentContainerStyle={styles.detailsScrollContent}
             showsVerticalScrollIndicator={false}
           >
@@ -1176,14 +1241,16 @@ const handlePreview = useCallback(async (doc: DocumentInput) => {
 
     // Android layout
     return (
-      <View style={[styles.detailsModalContainer, themeStyles.container]}>
+      <View style={[
+        styles.detailsModalContainer, 
+        isDarkMode ? styles.detailsModalContainerDark : styles.detailsModalContainerLight
+      ]}>
         {renderPreviewModal()}
+        {renderDeleteConfirmModal()}
         <View style={[
           styles.statusBarSpace,
-          { backgroundColor: isDarkMode ? '#1a1f38' : '#FFFFFF' }
-        ]}>
-          <Text style={{ color: 'transparent' }}>.</Text>
-        </View>
+          { backgroundColor: isDarkMode ? '#1a1f38' : '#FFFFFF', height: STATUSBAR_HEIGHT }
+        ]} />
 
         <View style={[
           styles.androidHeader,
@@ -1244,7 +1311,12 @@ const styles = RNStyleSheet.create({
   } as ViewStyle,
   detailsModalContainer: {
     flex: 1,
+  } as ViewStyle,
+  detailsModalContainerLight: {
     backgroundColor: "#F5F5F5",
+  } as ViewStyle,
+  detailsModalContainerDark: {
+    backgroundColor: "#121212",
   } as ViewStyle,
   detailsModalHeader: {
     flexDirection: "row",
@@ -1253,13 +1325,15 @@ const styles = RNStyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 44,
     paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.1)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  } as ViewStyle,
+  detailsModalHeaderDark: {
+    backgroundColor: "#1a1f38",
+    borderBottomColor: "rgba(255,255,255,0.1)",
   } as ViewStyle,
   backButton: {
     padding: 12,
@@ -1278,6 +1352,9 @@ const styles = RNStyleSheet.create({
   detailsScrollContainer: {
     flex: 1,
   },
+  detailsScrollContainerDark: {
+    backgroundColor: "#121212",
+  },
   detailsScrollContent: {
     padding: 16,
   },
@@ -1285,7 +1362,6 @@ const styles = RNStyleSheet.create({
     padding: 16,
     borderRadius: 16,
     marginBottom: 16,
-    backgroundColor: "#FFFFFF",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1388,9 +1464,11 @@ const styles = RNStyleSheet.create({
     alignItems: Platform.OS === 'android' ? "stretch" : "center",
     padding: 16,
     borderRadius: 16,
-    backgroundColor: "#FFFFFF",
     marginTop: 16,
     gap: Platform.OS === 'android' ? 12 : 8,
+  } as ViewStyle,
+  detailsActionsDark: {
+    backgroundColor: "#1E1E1E",
   } as ViewStyle,
   detailsActionButton: {
     flex: Platform.OS === 'android' ? 0 : 1,
@@ -1402,10 +1480,16 @@ const styles = RNStyleSheet.create({
     marginHorizontal: 8,
     minWidth: Platform.OS === 'android' ? 160 : 'auto',
   } as ViewStyle,
+  detailsActionButtonDark: {
+    backgroundColor: "#333333",
+  } as ViewStyle,
   detailsActionButtonText: {
     color: "#FFFFFF",
     fontSize: Platform.OS === 'android' ? 14 : 16,
     fontWeight: "600",
+  } as TextStyle,
+  detailsActionButtonTextDark: {
+    color: "#E0E0E0",
   } as TextStyle,
   documentsContainer: {
     marginTop: 12,
@@ -1420,9 +1504,14 @@ const styles = RNStyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
     borderRadius: 12,
     marginBottom: 8,
+  } as ViewStyle,
+  documentListItemLight: {
+    backgroundColor: "rgba(147, 112, 219, 0.1)",
+  } as ViewStyle,
+  documentListItemDark: {
+    backgroundColor: "rgba(179, 136, 255, 0.15)",
   } as ViewStyle,
   documentItemLeft: {
     flexDirection: "row",
@@ -1443,7 +1532,12 @@ const styles = RNStyleSheet.create({
   documentAction: {
     padding: 8,
     borderRadius: 20,
+  },
+  documentActionLight: {
     backgroundColor: "rgba(147, 112, 219, 0.1)",
+  },
+  documentActionDark: {
+    backgroundColor: "rgba(179, 136, 255, 0.2)",
   },
   previewButton: {
     marginRight: 8,
@@ -1513,7 +1607,6 @@ const styles = RNStyleSheet.create({
   } as TextStyle,
   // Android specific styles
   statusBarSpace: {
-    height: StatusBar.currentHeight || 24,
     width: '100%',
   } as ViewStyle,
   androidHeader: {
@@ -1550,11 +1643,160 @@ const styles = RNStyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(147, 112, 219, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
+  documentIconLight: {
+    backgroundColor: 'rgba(147, 112, 219, 0.1)',
+  },
+  documentIconDark: {
+    backgroundColor: 'rgba(179, 136, 255, 0.2)',
+  },
+  imagePreviewContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  previewActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  previewActionsLight: {
+    backgroundColor: '#FFFFFF',
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  previewActionsDark: {
+    backgroundColor: '#1a1f38',
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  previewActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    gap: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  previewActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Delete confirmation modal styles
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  } as ViewStyle,
+  confirmModalContainer: {
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+  } as ViewStyle,
+  confirmModalContainerLight: {
+    backgroundColor: '#FFFFFF',
+  } as ViewStyle,
+  confirmModalContainerDark: {
+    backgroundColor: '#1E1E1E',
+  } as ViewStyle,
+  confirmModalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: 'rgba(239, 83, 80, 0.1)',
+  } as ViewStyle,
+  confirmModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+  } as TextStyle,
+  confirmModalMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 28,
+    paddingHorizontal: 8,
+  } as TextStyle,
+  confirmModalActions: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  } as ViewStyle,
+  confirmModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  } as ViewStyle,
+  confirmModalCancelButton: {
+    borderWidth: 2,
+  } as ViewStyle,
+  confirmModalCancelButtonLight: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#E0E0E0',
+  } as ViewStyle,
+  confirmModalCancelButtonDark: {
+    backgroundColor: '#333333',
+    borderColor: '#555555',
+  } as ViewStyle,
+  confirmModalDeleteButton: {
+    backgroundColor: '#F44336',
+  } as ViewStyle,
+  confirmModalDeleteButtonDark: {
+    backgroundColor: '#EF5350',
+  } as ViewStyle,
+  confirmModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  } as TextStyle,
+  confirmModalCancelTextLight: {
+    color: '#666666',
+  } as TextStyle,
+  confirmModalCancelTextDark: {
+    color: '#E0E0E0',
+  } as TextStyle,
+  confirmModalDeleteText: {
+    color: '#FFFFFF',
+  } as TextStyle,
+  textLightSecondary: {
+    color: '#B0B0B0',
+  } as TextStyle,
+  textDarkSecondary: {
+    color: '#666666',
+  } as TextStyle,
 })
 
 export default DemandesDetails

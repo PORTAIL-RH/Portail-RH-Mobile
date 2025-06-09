@@ -1,5 +1,6 @@
-import React from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform } from "react-native"
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform, RefreshControl } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Search,
   Filter,
@@ -13,8 +14,97 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-} from "lucide-react-native"
-import type { Request, DemandesListProps } from "./Demandes"
+} from "lucide-react-native";
+import type { Request, DemandesListProps } from "./Demandes";
+
+// Cache constants
+const CACHE_KEY = 'requests-cache';
+const CACHE_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes cache expiry
+
+// Enhanced cache interface
+interface CacheData {
+  requests: Request[];
+  timestamp: number;
+  userId: string;
+  version: string;
+}
+
+// Cache manager class for better organization
+class CacheManager {
+  private static instance: CacheManager;
+  private memoryCache = new Map<string, any>();
+  private computedCache = new Map<string, any>();
+
+  static getInstance(): CacheManager {
+    if (!CacheManager.instance) {
+      CacheManager.instance = new CacheManager();
+    }
+    return CacheManager.instance;
+  }
+
+  async loadFromStorage(): Promise<Request[] | null> {
+    try {
+      const cachedData = await AsyncStorage.getItem(CACHE_KEY);
+      if (!cachedData) return null;
+
+      const { requests, timestamp, userId, version }: CacheData = JSON.parse(cachedData);
+      
+      // Check if cache is expired
+      if (Date.now() - timestamp > CACHE_EXPIRY_MS) {
+        await this.clearCache();
+        return null;
+      }
+
+      console.log('[CACHE] Loading from storage, age:', Math.round((Date.now() - timestamp) / 1000), 'seconds');
+      return requests;
+    } catch (error) {
+      console.error('[CACHE] Error loading from storage:', error);
+      return null;
+    }
+  }
+
+  async saveToStorage(requests: Request[], userId: string): Promise<void> {
+    try {
+      const cacheData: CacheData = {
+        requests,
+        timestamp: Date.now(),
+        userId,
+        version: '1.0'
+      };
+      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+      console.log('[CACHE] Saved to storage, count:', requests.length);
+    } catch (error) {
+      console.error('[CACHE] Error saving to storage:', error);
+    }
+  }
+
+  async clearCache(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(CACHE_KEY);
+      this.memoryCache.clear();
+      this.computedCache.clear();
+      console.log('[CACHE] Cache cleared');
+    } catch (error) {
+      console.error('[CACHE] Error clearing cache:', error);
+    }
+  }
+
+  getComputed(key: string): any {
+    return this.computedCache.get(key);
+  }
+
+  setComputed(key: string, value: any): void {
+    this.computedCache.set(key, value);
+  }
+
+  hasComputed(key: string): boolean {
+    return this.computedCache.has(key);
+  }
+
+  clearComputed(): void {
+    this.computedCache.clear();
+  }
+}
 
 const DemandesList: React.FC<DemandesListProps> = ({
   filteredRequests,
@@ -30,300 +120,474 @@ const DemandesList: React.FC<DemandesListProps> = ({
   filterRequests,
   searchRequests,
   loading = false,
+  onRefresh,
 }) => {
-  const [showFilterModal, setShowFilterModal] = React.useState(false)
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const cacheManager = CacheManager.getInstance();
 
-  // Helper functions
-  const getRequestTypeIcon = (type: string | undefined) => {
-    const typeString = typeof type === "string" ? type : "unknown"
-    const lowerCaseType = typeString.toLowerCase()
+  // Enhanced request type detection
+  const getRequestCategory = useCallback((request: Request): string => {
+    const type = request.type.toLowerCase();
+    if (type.includes("conge")) return "conge";
+    if (type.includes("formation")) return "formation";
+    if (type.includes("pre-avance") || type.includes("avance")) return "avance";
+    if (type.includes("document")) return "document";
+    if (type.includes("autorisation")) return "autorisation";
+    return "other";
+  }, []);
 
-    if (lowerCaseType.includes("congé")) {
-      return <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />
-    } else if (lowerCaseType.includes("formation")) {
-      return <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
-    } else if (lowerCaseType.includes("document")) {
-      return <FileText size={24} color={isDarkMode ? "#607D8B" : "#607D8B"} />
-    } else if (lowerCaseType.includes("pre-avance")) {
-      return <DollarSign size={24} color={isDarkMode ? "#FF9800" : "#FF9800"} />
-    } else if (lowerCaseType.includes("autorisation")) {
-      return <Shield size={24} color={isDarkMode ? "#673AB7" : "#673AB7"} />
-    } else {
-      return <FileText size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
+  // Get request status with caching
+  const getRequestStatus = useCallback((request: Request): "approved" | "rejected" | "pending" => {
+    const cacheKey = `status-${request.id}-${request.responseRh}-${request.responseChefs?.responseChef1}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
     }
-  }
 
-  const getRequestStatus = (request: Request): "approved" | "rejected" | "pending" => {
-    // Check if it's a document or pre-avance request
+    let status: "approved" | "rejected" | "pending";
+    
     if (request.type.toLowerCase().includes("document") || request.type.toLowerCase().includes("pre-avance")) {
-      // If responseRh is undefined or null, set dateDemande to "N/A"
       if (request.responseRh === undefined || request.responseRh === null) {
-        if (request.details) {
-          request.details.dateDemande = "N/A";
+        status = "pending";
+      } else {
+        switch (request.responseRh) {
+          case "T":
+            status = "approved";
+            break;
+          case "N":
+            status = "rejected";
+            break;
+          case "I":
+          default:
+            status = "pending";
         }
-        return "pending";
+      }
+    } else {
+      if (!request.responseChefs) {
+        status = "pending";
+      } else {
+        switch (request.responseChefs.responseChef1) {
+          case "O":
+            status = "approved";
+            break;
+          case "N":
+            status = "rejected";
+            break;
+          case "I":
+          default:
+            status = "pending";
+        }
+      }
+    }
+
+    cacheManager.setComputed(cacheKey, status);
+    return status;
+  }, []);
+
+  // Main filtering function
+  const getFilteredAndSearchedRequests = useMemo(() => {
+    const cacheKey = `filtered-${activeFilter}-${activeTypeFilter}-${searchQuery}-${filteredRequests.length}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
+    let filtered = [...filteredRequests];
+
+    // Apply status filter
+    if (activeFilter !== "all") {
+      filtered = filtered.filter(request => {
+        const status = getRequestStatus(request);
+        return status === activeFilter;
+      });
+    }
+
+    // Apply type filter
+    if (activeTypeFilter !== "all") {
+      filtered = filtered.filter(request => {
+        const category = getRequestCategory(request);
+        return category === activeTypeFilter;
+      });
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(request => 
+        request.type.toLowerCase().includes(query) ||
+        request.description.toLowerCase().includes(query) ||
+        (request.details?.typeConge && request.details.typeConge.toLowerCase().includes(query)) ||
+        (request.details?.titre && request.details.titre.toLowerCase().includes(query)) ||
+        (request.details?.typeDocument && request.details.typeDocument.toLowerCase().includes(query))
+      );
+    }
+
+    // Sort by date (newest first)
+    filtered.sort((a, b) => {
+      const dateA = a.details?.dateDemande ? new Date(a.details.dateDemande).getTime() : 0;
+      const dateB = b.details?.dateDemande ? new Date(b.details.dateDemande).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    cacheManager.setComputed(cacheKey, filtered);
+    return filtered;
+  }, [filteredRequests, activeFilter, activeTypeFilter, searchQuery, getRequestStatus, getRequestCategory]);
+
+  // Helper functions with caching
+  const getRequestTypeIcon = useCallback((type: string | undefined) => {
+    const typeString = typeof type === "string" ? type : "unknown";
+    const lowerCaseType = typeString.toLowerCase();
+    const cacheKey = `typeIcon-${lowerCaseType}-${isDarkMode}`;
+
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
+    let icon;
+    if (lowerCaseType.includes("congé")) {
+      icon = <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />;
+    } else if (lowerCaseType.includes("formation")) {
+      icon = <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />;
+    } else if (lowerCaseType.includes("document")) {
+      icon = <FileText size={24} color={isDarkMode ? "#607D8B" : "#607D8B"} />;
+    } else if (lowerCaseType.includes("pre-avance") || lowerCaseType.includes("avance")) {
+      icon = <DollarSign size={24} color={isDarkMode ? "#FF9800" : "#FF9800"} />;
+    } else if (lowerCaseType.includes("autorisation")) {
+      icon = <Shield size={24} color={isDarkMode ? "#673AB7" : "#673AB7"} />;
+    } else {
+      icon = <FileText size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />;
+    }
+
+    cacheManager.setComputed(cacheKey, icon);
+    return icon;
+  }, [isDarkMode]);
+
+  const getStatusIcon = useCallback((request: Request) => {
+    const status = getRequestStatus(request);
+    const cacheKey = `statusIcon-${request.id}-${status}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
+    let icon;
+    switch (status) {
+      case "approved":
+        icon = <CheckCircle size={18} color="#4CAF50" />;
+        break;
+      case "rejected":
+        icon = <XCircle size={18} color="#F44336" />;
+        break;
+      case "pending":
+      default:
+        icon = <Clock size={18} color="#FFC107" />;
+    }
+
+    cacheManager.setComputed(cacheKey, icon);
+    return icon;
+  }, [getRequestStatus]);
+
+  const getStatusColor = useCallback((request: Request) => {
+    const status = getRequestStatus(request);
+    const cacheKey = `statusColor-${request.id}-${status}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
+    let color;
+    switch (status) {
+      case "approved":
+        color = "#4CAF50";
+        break;
+      case "rejected":
+        color = "#F44336";
+        break;
+      case "pending":
+        color = "#FFC107";
+        break;
+      default:
+        color = "#9370DB";
+    }
+
+    cacheManager.setComputed(cacheKey, color);
+    return color;
+  }, [getRequestStatus]);
+
+  const getStatusText = useCallback((request: Request) => {
+    const status = getRequestStatus(request);
+    const cacheKey = `statusText-${request.id}-${status}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
+    let text;
+    switch (status) {
+      case "approved":
+        text = "Approuvée";
+        break;
+      case "rejected":
+        text = "Rejetée";
+        break;
+      case "pending":
+        text = "En attente";
+        break;
+      default:
+        text = "";
+    }
+
+    cacheManager.setComputed(cacheKey, text);
+    return text;
+  }, [getRequestStatus]);
+
+  const formatDate = useCallback((dateString: string | undefined) => {
+    if (!dateString || dateString === "N/A") return "";
+    const cacheKey = `date-${dateString}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
+    try {
+      if (dateString.includes("/")) {
+        cacheManager.setComputed(cacheKey, dateString);
+        return dateString;
       }
       
-      switch (request.responseRh) {
-        case "T":
-          return "approved"
-        case "N":
-          return "rejected"
-        case "I":
-        default:
-          return "pending"
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        cacheManager.setComputed(cacheKey, dateString);
+        return dateString;
       }
-    }
-    
-    // For other request types, use responseChefs
-    if (!request.responseChefs) return "pending";
-    
-    switch (request.responseChefs.responseChef1) {
-      case "O":
-        return "approved"
-      case "N":
-        return "rejected"
-      case "I":
-      default:
-        return "pending"
-    }
-  }
-
-  const getStatusIcon = (request: Request) => {
-    const status = getRequestStatus(request);
-    switch (status) {
-      case "approved":
-        return <CheckCircle size={18} color="#4CAF50" />
-      case "rejected":
-        return <XCircle size={18} color="#F44336" />
-      case "pending":
-        return <Clock size={18} color="#FFC107" />
-      default:
-        return null
-    }
-  }
-
-  const getStatusColor = (request: Request) => {
-    const status = getRequestStatus(request);
-    switch (status) {
-      case "approved":
-        return "#4CAF50"
-      case "rejected":
-        return "#F44336"
-      case "pending":
-        return "#FFC107"
-      default:
-        return "#9370DB"
-    }
-  }
-
-  const getStatusText = (request: Request) => {
-    const status = getRequestStatus(request);
-    switch (status) {
-      case "approved":
-        return "Approuvée"
-      case "rejected":
-        return "Rejetée"
-      case "pending":
-        return "En attente"
-      default:
-        return ""
-    }
-  }
-
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString || dateString === "N/A") return ""
-    try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) return dateString
-      return date.toLocaleDateString("fr-FR", {
+      const formattedDate = date.toLocaleDateString("fr-FR", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
-      })
+      });
+      cacheManager.setComputed(cacheKey, formattedDate);
+      return formattedDate;
     } catch (error) {
-      console.error("Error formatting date:", error)
-      return dateString
+      console.error("Error formatting date:", error);
+      cacheManager.setComputed(cacheKey, dateString);
+      return dateString;
     }
-  }
+  }, []);
 
-  const formatTime = (dateString: string | undefined) => {
-    if (!dateString || dateString === "N/A") return ""
+  const formatTime = useCallback((dateString: string | undefined) => {
+    if (!dateString || dateString === "N/A") return "";
+    const cacheKey = `time-${dateString}`;
+    
+    if (cacheManager.hasComputed(cacheKey)) {
+      return cacheManager.getComputed(cacheKey);
+    }
+
     try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) return ""
-      return date.toLocaleTimeString("fr-FR", {
+      if (dateString.includes(":")) {
+        cacheManager.setComputed(cacheKey, dateString);
+        return dateString;
+      }
+      
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        cacheManager.setComputed(cacheKey, "");
+        return "";
+      }
+      const formattedTime = date.toLocaleTimeString("fr-FR", {
         hour: "2-digit",
         minute: "2-digit",
-      })
+      });
+      cacheManager.setComputed(cacheKey, formattedTime);
+      return formattedTime;
     } catch (error) {
-      console.error("Error formatting time:", error)
-      return ""
+      console.error("Error formatting time:", error);
+      cacheManager.setComputed(cacheKey, "");
+      return "";
     }
-  }
+  }, []);
 
-  const renderRequestItem = ({ item }: { item: Request }) => {
-    const getRequestTypeIcon = (type: string) => {
-      const lowerCaseType = type.toLowerCase()
-      if (lowerCaseType.includes("congé")) {
-        return <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />
-      } else if (lowerCaseType.includes("formation")) {
-        return <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
-      } else if (lowerCaseType.includes("document")) {
-        return <FileText size={24} color={isDarkMode ? "#607D8B" : "#607D8B"} />
-      } else if (lowerCaseType.includes("pre-avance")) {
-        return <DollarSign size={24} color={isDarkMode ? "#FF9800" : "#FF9800"} />
-      } else if (lowerCaseType.includes("autorisation")) {
-        return <Shield size={24} color={isDarkMode ? "#673AB7" : "#673AB7"} />
-      } else {
-        return <FileText size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    searchRequests("");
+    cacheManager.clearComputed();
+  }, [setSearchQuery, searchRequests]);
+
+  const handleRefresh = useCallback(async () => {
+    if (onRefresh) {
+      setIsRefreshing(true);
+      try {
+        cacheManager.clearComputed();
+        await onRefresh();
+      } catch (error) {
+        console.error('Error during refresh:', error);
+      } finally {
+        setIsRefreshing(false);
       }
     }
+  }, [onRefresh]);
 
-    const getStatusIcon = (status: string) => {
-      switch (status) {
-        case "approved":
-          return <CheckCircle size={18} color="#4CAF50" />
-        case "rejected":
-          return <XCircle size={18} color="#F44336" />
-        case "pending":
-          return <Clock size={18} color="#FFC107" />
-        default:
-          return null
-      }
-    }
+  const resetStatusFilter = useCallback(() => {
+    filterRequests("all", activeTypeFilter);
+    cacheManager.clearComputed();
+  }, [filterRequests, activeTypeFilter]);
 
-    const getStatusColor = (status: string) => {
-      switch (status) {
-        case "approved":
-          return "#4CAF50"
-        case "rejected":
-          return "#F44336"
-        case "pending":
-          return "#FFC107"
-        default:
-          return "#9370DB"
-      }
-    }
+  const resetTypeFilter = useCallback(() => {
+    filterRequests(activeFilter, "all");
+    cacheManager.clearComputed();
+  }, [filterRequests, activeFilter]);
 
-    const getStatusText = (status: string) => {
-      switch (status) {
-        case "approved":
-          return "Approuvée"
-        case "rejected":
-          return "Rejetée"
-        case "pending":
-          return "En attente"
-        default:
-          return ""
-      }
-    }
+  const applyFilter = useCallback((status: string, type?: string) => {
+    filterRequests(status, type || activeTypeFilter);
+    setShowFilterModal(false);
+    cacheManager.clearComputed();
+  }, [filterRequests, activeTypeFilter]);
 
-    return (
-      <TouchableOpacity style={[styles.requestItem, themeStyles.card]} onPress={() => onSelectRequest(item)}>
-        <View style={styles.requestItemLeft}>
-          {getRequestTypeIcon(item.type)}
-          <View style={styles.requestInfo}>
-            <Text style={[styles.requestType, themeStyles.text]} numberOfLines={1}>
-              {item.type}
-            </Text>
-            <Text style={[styles.requestDescription, themeStyles.subtleText]} numberOfLines={2}>
-              {item.description}
-            </Text>
-            <Text style={[styles.requestDate, themeStyles.subtleText]}>
-              {item.details.dateDemande === "N/A" ? "Date non disponible" : `Soumise le ${formatDate(item.details.dateDemande)}${formatTime(item.details.dateDemande) ? ` à ${formatTime(item.details.dateDemande)}` : ""}`}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.requestItemRight}>
-          <View
-            style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}20` }]}
-          >
-            {getStatusIcon(item.status)}
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-              {getStatusText(item.status)}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    )
-  }
+  const applyTypeFilter = useCallback((type: string) => {
+    filterRequests(activeFilter, type);
+    setShowFilterModal(false);
+    cacheManager.clearComputed();
+  }, [filterRequests, activeFilter]);
 
-  // Add sorting function
-  const sortByDateDemande = (requests: Request[]) => {
-    return [...requests].sort((a, b) => {
-      const dateA = a.details.dateDemande ? new Date(a.details.dateDemande).getTime() : 0;
-      const dateB = b.details.dateDemande ? new Date(b.details.dateDemande).getTime() : 0;
-      return dateB - dateA; // Sort in descending order (newest first)
-    });
-  };
+  const finalFilteredRequests = getFilteredAndSearchedRequests;
+
+  // Enhanced Loading Component with theme support
+  const LoadingSpinner = ({ message = "Chargement..." }) => (
+    <View style={[styles.loadingContainer, themeStyles?.spinnerContainer]}>
+      <ActivityIndicator 
+        size="large" 
+        color="#9370DB"
+      />
+      <Text style={[styles.loadingText, themeStyles?.spinnerText || themeStyles?.text]}>
+        {message}
+      </Text>
+    </View>
+  );
+
+  // Enhanced Empty State Component
+  const EmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <FileText size={48} color={isDarkMode ? "#666" : "#CCC"} />
+      <Text style={[styles.emptyText, themeStyles.text]}>
+        {searchQuery ? "Aucune demande trouvée pour cette recherche" : "Aucune demande trouvée"}
+      </Text>
+      {searchQuery && (
+        <TouchableOpacity onPress={clearSearch} style={styles.clearSearchButton}>
+          <Text style={[styles.clearSearchText, { color: "#9370DB" }]}>
+            Effacer la recherche
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       {/* Search and filter section */}
       <View style={[styles.searchContainer, themeStyles.searchContainer]}>
         <View style={[styles.searchInputContainer, themeStyles.searchInputContainer]}>
-          <Search size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
+          <Search size={20} color={isDarkMode ? "#E0E0E0" : "#666"} style={styles.searchIcon} />
           <TextInput
             style={[styles.searchInput, themeStyles.searchInput]}
             placeholder="Rechercher une demande..."
             placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
             value={searchQuery}
             onChangeText={(text) => {
-              setSearchQuery(text)
-              searchRequests(text)
+              setSearchQuery(text);
+              searchRequests(text);
             }}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            autoCorrect={false}
+            autoCapitalize="none"
           />
-          {searchQuery !== "" && (
+          {searchQuery !== "" && Platform.OS === 'android' && (
             <TouchableOpacity
-              onPress={() => {
-                setSearchQuery("")
-                searchRequests("")
-              }}
+              onPress={clearSearch}
+              style={styles.clearButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <X size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
+              <X size={18} color={isDarkMode ? "#E0E0E0" : "#666"} />
             </TouchableOpacity>
           )}
         </View>
         <TouchableOpacity
           style={[styles.filterButton, themeStyles.filterButton]}
           onPress={() => setShowFilterModal(true)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Filter size={20} color={isDarkMode ? "#E0E0E0" : "#333"} />
+          <Filter size={20} color={isDarkMode ? "#E0E0E0" : "#666"} />
         </TouchableOpacity>
       </View>
 
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[styles.filtersScrollView, themeStyles.filtersScrollView]}
-        contentContainerStyle={styles.filtersContent}
-      >
-        {/* ... existing filter chips ... */}
-      </ScrollView>
+      {/* Active filters display */}
+      {(activeFilter !== "all" || activeTypeFilter !== "all") && (
+        <View style={[styles.activeFiltersContainer, themeStyles.activeFiltersContainer]}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.activeFiltersContent}
+          >
+            {activeFilter !== "all" && (
+              <View style={[styles.activeFilterChip, themeStyles.activeFilterChip]}>
+                <Text style={[styles.activeFilterText, themeStyles.activeFilterText]}>
+                  {activeFilter === "pending" ? "En attente" : 
+                   activeFilter === "approved" ? "Approuvées" : 
+                   activeFilter === "rejected" ? "Rejetées" : activeFilter}
+                </Text>
+                <TouchableOpacity onPress={resetStatusFilter}>
+                  <X size={14} color={isDarkMode ? "#FFFFFF" : "#FFFFFF"} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {activeTypeFilter !== "all" && (
+              <View style={[styles.activeFilterChip, themeStyles.activeFilterChip]}>
+                <Text style={[styles.activeFilterText, themeStyles.activeFilterText]}>
+                  {activeTypeFilter === "conge" ? "Congés" :
+                   activeTypeFilter === "formation" ? "Formations" :
+                   activeTypeFilter === "avance" ? "Avances" :
+                   activeTypeFilter === "document" ? "Documents" :
+                   activeTypeFilter === "autorisation" ? "Autorisations" : activeTypeFilter}
+                </Text>
+                <TouchableOpacity onPress={resetTypeFilter}>
+                  <X size={14} color={isDarkMode ? "#FFFFFF" : "#FFFFFF"} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
 
-      {/* Requests list */}
+      {/* Main Content Area */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={isDarkMode ? "#9370DB" : "#9370DB"} />
-          <Text style={[styles.loadingText, themeStyles.text]}>Chargement...</Text>
-        </View>
-      ) : filteredRequests.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, themeStyles.text]}>Aucune demande trouvée</Text>
-        </View>
+        <LoadingSpinner message="Chargement des demandes..." />
+      ) : finalFilteredRequests.length === 0 ? (
+        <EmptyState />
       ) : (
         <ScrollView 
           style={styles.requestsList}
           contentContainerStyle={styles.requestsListContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                colors={["#9370DB"]}
+                tintColor="#9370DB"
+                title="Actualisation..."
+                titleColor={isDarkMode ? "#FFFFFF" : "#333333"}
+              />
+            ) : undefined
+          }
         >
-          {filteredRequests.map((request) => (
+          {finalFilteredRequests.map((request) => (
             <TouchableOpacity
               key={request.id}
               style={[styles.requestCard, themeStyles.card]}
               onPress={() => onSelectRequest(request)}
+              activeOpacity={0.7}
             >
               <View style={styles.requestCardContent}>
                 <View style={styles.requestTypeContainer}>
@@ -336,15 +600,15 @@ const DemandesList: React.FC<DemandesListProps> = ({
                       {request.description}
                     </Text>
                     <Text style={[styles.requestDate, themeStyles.subtleText]}>
-                      {request.details.dateDemande === "N/A" 
+                      {request.details?.dateDemande === "N/A" 
                         ? "Date non disponible" 
-                        : `Soumise le ${formatDate(request.details.dateDemande)}${
+                        : `Soumise le ${formatDate(request.details?.dateDemande)}${
                             request.time ? ` à ${request.time}` : ""
                           }`}
                     </Text>
                   </View>
                 </View>
-                <View style={styles.statusContainer}>
+                <View style={[styles.statusContainer, { borderTopColor: isDarkMode ? "rgba(255,255,255,0.1)" : "#E0E0E0" }]}>
                   <View
                     style={[
                       styles.statusBadge,
@@ -368,290 +632,329 @@ const DemandesList: React.FC<DemandesListProps> = ({
       <Modal
         visible={showFilterModal}
         transparent={true}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowFilterModal(false)}
       >
         <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowFilterModal(false)}
+          />
           <View style={[styles.filterModal, themeStyles.card]}>
-            <View style={styles.filterModalHeader}>
+            <View style={[styles.filterModalHeader, { borderBottomColor: isDarkMode ? "rgba(255,255,255,0.1)" : "#E0E0E0" }]}>
               <Text style={[styles.filterModalTitle, themeStyles.text]}>Filtrer les demandes</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+              <TouchableOpacity 
+                onPress={() => setShowFilterModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <X size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
               </TouchableOpacity>
             </View>
 
-            {/* Filtrer par statut */}
-            <Text style={[styles.filterSectionTitle, themeStyles.text]}>Par statut</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Filter by status */}
+              <Text style={[styles.filterSectionTitle, themeStyles.text]}>Par statut</Text>
 
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeFilter === "all" && styles.activeFilterOption,
-                activeFilter === "all" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests("all")}
-            >
-              <Text
+              <TouchableOpacity
                 style={[
-                  styles.filterOptionText,
-                  themeStyles.text,
-                  activeFilter === "all" && styles.activeFilterOptionText,
+                  styles.filterOption,
+                  activeFilter === "all" && styles.activeFilterOption,
+                  activeFilter === "all" && themeStyles.activeFilterOption,
                 ]}
+                onPress={() => applyFilter("all")}
               >
-                Tous les statuts
-              </Text>
-              {activeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeFilter === "pending" && styles.activeFilterOption,
-                activeFilter === "pending" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests("pending")}
-            >
-              <View style={styles.filterOptionContent}>
-                <Clock size={20} color="#FFC107" />
                 <Text
                   style={[
                     styles.filterOptionText,
                     themeStyles.text,
-                    activeFilter === "pending" && styles.activeFilterOptionText,
+                    activeFilter === "all" && styles.activeFilterOptionText,
                   ]}
                 >
-                  En attente
+                  Tous les statuts
                 </Text>
-              </View>
-              {activeFilter === "pending" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeFilter === "approved" && styles.activeFilterOption,
-                activeFilter === "approved" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests("approved")}
-            >
-              <View style={styles.filterOptionContent}>
-                <CheckCircle size={20} color="#4CAF50" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeFilter === "approved" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Approuvées
-                </Text>
-              </View>
-              {activeFilter === "approved" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeFilter === "rejected" && styles.activeFilterOption,
-                activeFilter === "rejected" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests("rejected")}
-            >
-              <View style={styles.filterOptionContent}>
-                <XCircle size={20} color="#F44336" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeFilter === "rejected" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Rejetées
-                </Text>
-              </View>
-              {activeFilter === "rejected" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            {/* Filtrer par type */}
-            <Text style={[styles.filterSectionTitle, themeStyles.text, { marginTop: 16 }]}>Par type</Text>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeTypeFilter === "all" && styles.activeFilterOption,
-                activeTypeFilter === "all" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests(activeFilter, "all")}
-            >
-              <Text
-                style={[
-                  styles.filterOptionText,
-                  themeStyles.text,
-                  activeTypeFilter === "all" && styles.activeFilterOptionText,
-                ]}
-              >
-                Tous les types
-              </Text>
-              {activeTypeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeTypeFilter === "conge" && styles.activeFilterOption,
-                activeTypeFilter === "conge" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests(activeFilter, "conge")}
-            >
-              <View style={styles.filterOptionContent}>
-                <Calendar size={20} color="#9370DB" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeTypeFilter === "conge" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Congés
-                </Text>
-              </View>
-              {activeTypeFilter === "conge" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeTypeFilter === "formation" && styles.activeFilterOption,
-                activeTypeFilter === "formation" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests(activeFilter, "formation")}
-            >
-              <View style={styles.filterOptionContent}>
-                <GraduationCap size={20} color="#2196F3" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeTypeFilter === "formation" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Formations
-                </Text>
-              </View>
-              {activeTypeFilter === "formation" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeTypeFilter === "avance" && styles.activeFilterOption,
-                activeTypeFilter === "avance" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests(activeFilter, "avance")}
-            >
-              <View style={styles.filterOptionContent}>
-                <DollarSign size={20} color="#FF9800" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeTypeFilter === "avance" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Avances
-                </Text>
-              </View>
-              {activeTypeFilter === "avance" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeTypeFilter === "document" && styles.activeFilterOption,
-                activeTypeFilter === "document" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests(activeFilter, "document")}
-            >
-              <View style={styles.filterOptionContent}>
-                <FileText size={20} color="#607D8B" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeTypeFilter === "document" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Documents
-                </Text>
-              </View>
-              {activeTypeFilter === "document" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                activeTypeFilter === "autorisation" && styles.activeFilterOption,
-                activeTypeFilter === "autorisation" && themeStyles.activeFilterOption,
-              ]}
-              onPress={() => filterRequests(activeFilter, "autorisation")}
-            >
-              <View style={styles.filterOptionContent}>
-                <Shield size={20} color="#673AB7" />
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    themeStyles.text,
-                    activeTypeFilter === "autorisation" && styles.activeFilterOptionText,
-                  ]}
-                >
-                  Autorisations
-                </Text>
-              </View>
-              {activeTypeFilter === "autorisation" && <CheckCircle size={20} color="#9370DB" />}
-            </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}  style={{ alignSelf: 'flex-end'}} >
-                <Search size={24}  color={isDarkMode ? "#E0E0E0" : "#333"} />
+                {activeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeFilter === "pending" && styles.activeFilterOption,
+                  activeFilter === "pending" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyFilter("pending")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <Clock size={20} color="#FFC107" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeFilter === "pending" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    En attente
+                  </Text>
+                </View>
+                {activeFilter === "pending" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeFilter === "approved" && styles.activeFilterOption,
+                  activeFilter === "approved" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyFilter("approved")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <CheckCircle size={20} color="#4CAF50" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeFilter === "approved" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Approuvées
+                  </Text>
+                </View>
+                {activeFilter === "approved" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeFilter === "rejected" && styles.activeFilterOption,
+                  activeFilter === "rejected" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyFilter("rejected")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <XCircle size={20} color="#F44336" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeFilter === "rejected" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Rejetées
+                  </Text>
+                </View>
+                {activeFilter === "rejected" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              {/* Filter by type */}
+              <Text style={[styles.filterSectionTitle, themeStyles.text, { marginTop: 16 }]}>Par type</Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeTypeFilter === "all" && styles.activeFilterOption,
+                  activeTypeFilter === "all" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyTypeFilter("all")}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    themeStyles.text,
+                    activeTypeFilter === "all" && styles.activeFilterOptionText,
+                  ]}
+                >
+                  Tous les types
+                </Text>
+                {activeTypeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeTypeFilter === "conge" && styles.activeFilterOption,
+                  activeTypeFilter === "conge" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyTypeFilter("conge")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <Calendar size={20} color="#9370DB" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeTypeFilter === "conge" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Congés
+                  </Text>
+                </View>
+                {activeTypeFilter === "conge" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeTypeFilter === "formation" && styles.activeFilterOption,
+                  activeTypeFilter === "formation" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyTypeFilter("formation")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <GraduationCap size={20} color="#2196F3" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeTypeFilter === "formation" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Formations
+                  </Text>
+                </View>
+                {activeTypeFilter === "formation" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeTypeFilter === "avance" && styles.activeFilterOption,
+                  activeTypeFilter === "avance" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyTypeFilter("avance")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <DollarSign size={20} color="#FF9800" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeTypeFilter === "avance" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Avances
+                  </Text>
+                </View>
+                {activeTypeFilter === "avance" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeTypeFilter === "document" && styles.activeFilterOption,
+                  activeTypeFilter === "document" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyTypeFilter("document")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <FileText size={20} color="#607D8B" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeTypeFilter === "document" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Documents
+                  </Text>
+                </View>
+                {activeTypeFilter === "document" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  activeTypeFilter === "autorisation" && styles.activeFilterOption,
+                  activeTypeFilter === "autorisation" && themeStyles.activeFilterOption,
+                ]}
+                onPress={() => applyTypeFilter("autorisation")}
+              >
+                <View style={styles.filterOptionContent}>
+                  <Shield size={20} color="#673AB7" />
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      themeStyles.text,
+                      activeTypeFilter === "autorisation" && styles.activeFilterOptionText,
+                    ]}
+                  >
+                    Autorisations
+                  </Text>
+                </View>
+                {activeTypeFilter === "autorisation" && <CheckCircle size={20} color="#9370DB" />}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  searchInputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    height: 36,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    minHeight: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    height: 36,
-    fontSize: 17,
+    fontSize: 16,
+    ...Platform.select({
+      android: {
+        paddingVertical: 0,
+      },
+    }),
+  },
+  clearButton: {
+    padding: 4,
     marginLeft: 8,
   },
   filterButton: {
-    position: 'absolute',
-    right: 16,
-    top: 8,
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: 12,
+  },
+  activeFiltersContainer: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  activeFiltersContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  activeFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#9370DB",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  activeFilterText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "500",
   },
   requestsList: {
     flex: 1,
@@ -661,17 +964,17 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
   requestCard: {
-    borderRadius: 10,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 12,
     ...Platform.select({
       ios: {
         shadowColor: "#000000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 2,
+        elevation: 3,
       },
     }),
   },
@@ -710,10 +1013,10 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 8,
-    gap: 4,
+    gap: 6,
   },
   statusText: {
     fontSize: 13,
@@ -723,40 +1026,55 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 40,
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 15,
+    fontSize: 16,
+    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 40,
   },
   emptyText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  clearSearchButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  clearSearchText: {
     fontSize: 15,
+    fontWeight: "500",
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    flex: 1,
   },
   filterModal: {
-    width: "90%",
-    maxWidth: 400,
-    borderRadius: 14,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
+    maxHeight: "80%",
     ...Platform.select({
       ios: {
         shadowColor: "#000000",
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.25,
         shadowRadius: 8,
       },
       android: {
-        elevation: 5,
+        elevation: 8,
       },
     }),
   },
@@ -764,95 +1082,46 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
   },
   filterModalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "600",
   },
   filterSectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
-    marginBottom: 8,
-    marginTop: 16,
+    marginBottom: 12,
+    marginTop: 8,
   },
   filterOption: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 8,
+    minHeight: 50,
   },
   activeFilterOption: {
-    backgroundColor: "rgba(147, 112, 219, 0.1)",
+    backgroundColor: "rgba(147, 112, 219, 0.15)",
   },
   filterOptionContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    flex: 1,
   },
   filterOptionText: {
-    fontSize: 15,
+    fontSize: 16,
   },
   activeFilterOptionText: {
     fontWeight: "600",
+    color: "#9370DB",
   },
-  filtersScrollView: {
-    maxHeight: 44,
-    marginBottom: 8,
-  },
-  filtersContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  chipContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginRight: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  activeChip: {
-    backgroundColor: '#9370DB',
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  activeChipText: {
-    color: '#FFFFFF',
-  },
-  requestItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  requestItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  requestItemRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  filters: {
-    flexDirection: "row",
-    gap: 8,
-  },
-})
+});
 
-export default DemandesList
+export default DemandesList;

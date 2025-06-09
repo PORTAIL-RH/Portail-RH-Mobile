@@ -30,12 +30,10 @@ import {
   XCircle,
 } from "lucide-react-native"
 import Footer from "../Components/Footer"
-import LeaveDaysInfo  from "../Components/LeaveDaysInfo"
+import LeaveDaysInfo from "../Components/LeaveDaysInfo"
 
 import { API_CONFIG } from "../config/apiConfig"
 import useApiPooling from "../useApiPooling"
-
-
 
 type RootStackParamList = {
   AccueilCollaborateur: undefined
@@ -120,16 +118,16 @@ const CalendarPage = () => {
     refresh: refreshEvents,
   } = useApiPooling<CalendarEvent[]>({
     apiCall: async () => {
-      if (!userId) {
-        throw new Error("User ID not available")
+      const [userId, token] = await Promise.all([
+        AsyncStorage.getItem("userId"),
+        AsyncStorage.getItem("userToken")
+      ]);
+
+      if (!userId || !token) {
+        throw new Error("User ID or token not available");
       }
 
-      const token = await AsyncStorage.getItem("userToken")
-      if (!token) {
-        throw new Error("Authentication token not available")
-      }
-
-      const leaveResponse = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}/approved`, {
+      const leaveResponse = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}/approved-by-chef1`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -336,10 +334,10 @@ const CalendarPage = () => {
             <View style={styles.userInfo}>
               <CalendarIcon size={24} color={isDarkMode ? "#4285F4" : "#4285F4"} />
               <Text style={[styles.userName, themeStyles.text]}>
-                {userData ? `${userData.prenom} ${userData.nom}` : "Calendrier"}
+                {userData ? `${userData.nom}` : "Calendrier"}
               </Text>
             </View>
-<LeaveDaysInfo />
+            <LeaveDaysInfo isDarkMode={isDarkMode} />
             <Text style={[styles.calendarSubtitle, themeStyles.subtleText]}>Vos congés approuvés</Text>
           </View>
 
@@ -538,7 +536,7 @@ const CalendarPage = () => {
         </View>
       </Modal>
 
-      <Footer />
+      <Footer/>
     </SafeAreaView>
   )
 }
@@ -596,36 +594,36 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
+  } as ViewStyle,
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-  },
+  } as TextStyle,
   scrollContainer: {
     flex: 1,
-  },
+  } as ViewStyle,
   scrollContent: {
     padding: 16,
     paddingBottom: 80,
-  },
+  } as ViewStyle,
   calendarHeader: {
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
-  },
+  } as ViewStyle,
   userName: {
     fontSize: 18,
     fontWeight: "600",
     marginLeft: 8,
-  },
+  } as TextStyle,
   calendarSubtitle: {
     fontSize: 14,
-  },
+  } as TextStyle,
   monthNavigation: {
     flexDirection: "row",
     alignItems: "center",
@@ -633,223 +631,223 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   monthButton: {
     padding: 8,
-  },
+  } as ViewStyle,
   monthTitle: {
     fontSize: 18,
     fontWeight: "600",
     textTransform: "capitalize",
-  },
+  } as TextStyle,
   calendarContainer: {
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 16,
-  },
+  } as ViewStyle,
   daysOfWeek: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#EEEEEE",
-  },
+  } as ViewStyle,
   dayOfWeekCell: {
     flex: 1,
     padding: 10,
     alignItems: "center",
-  },
+  } as ViewStyle,
   dayOfWeekText: {
     fontSize: 14,
     fontWeight: "500",
-  },
+  } as TextStyle,
   calendarGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-  },
+  } as ViewStyle,
   calendarCell: {
     width: `${100 / 7}%`,
     aspectRatio: 1,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-  },
+  } as ViewStyle,
   emptyCell: {
     backgroundColor: "transparent",
-  },
+  } as ViewStyle,
   todayCell: {
     backgroundColor: "rgba(0, 51, 133, 0.88)",
     borderRadius: 20,
-  },
+  } as ViewStyle,
   selectedCell: {
     backgroundColor: "#4285F4",
-  },
+  } as ViewStyle,
   approvedCell: {
     backgroundColor: "rgba(76, 175, 80, 0.2)",
-  },
+  } as ViewStyle,
   calendarDayText: {
     fontSize: 16,
     fontWeight: "500",
-  },
+  } as TextStyle,
   todayText: {
     fontWeight: "bold",
-  },
+  } as TextStyle,
   selectedText: {
     color: "white",
-  },
+  } as TextStyle,
   approvedText: {
     color: "#4CAF50",
     fontWeight: "bold",
-  },
+  } as TextStyle,
   legendContainer: {
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   legendTitle: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 12,
-  },
+  } as TextStyle,
   legendItems: {
     flexDirection: "row",
     justifyContent: "space-between",
-  },
+  } as ViewStyle,
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
-  },
+  } as ViewStyle,
   legendColorBox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     marginRight: 8,
-  },
+  } as ViewStyle,
   legendText: {
     fontSize: 14,
-  },
+  } as TextStyle,
   sectionContainer: {
     marginBottom: 24,
-  },
+  } as ViewStyle,
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 12,
-  },
+  } as TextStyle,
   emptyEvents: {
     padding: 20,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-  },
+  } as ViewStyle,
   emptyEventsText: {
     fontSize: 16,
-  },
+  } as TextStyle,
   eventCard: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     position: "relative",
     overflow: "hidden",
-  },
+  } as ViewStyle,
   eventCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-  },
+  } as ViewStyle,
   eventTypeContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
+  } as ViewStyle,
   eventType: {
     fontSize: 16,
     fontWeight: "600",
-  },
+  } as TextStyle,
   eventDuration: {
     fontSize: 14,
-  },
+  } as TextStyle,
   eventDates: {
     marginBottom: 12,
-  },
+  } as ViewStyle,
   dateContainer: {
     flexDirection: "row",
     marginBottom: 4,
-  },
+  } as ViewStyle,
   dateLabel: {
     fontSize: 14,
     width: 30,
-  },
+  } as TextStyle,
   dateValue: {
     fontSize: 14,
     fontWeight: "500",
-  },
+  } as TextStyle,
   eventComment: {
     fontSize: 14,
     fontStyle: "italic",
-  },
+  } as TextStyle,
   eventStatusBar: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
     width: 4,
-  },
+  } as ViewStyle,
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-  },
+  } as ViewStyle,
   modalContainer: {
     width: "90%",
     maxHeight: "80%",
     borderRadius: 12,
     padding: 16,
-  },
+  } as ViewStyle,
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
-  },
+  } as ViewStyle,
   modalTitle: {
     fontSize: 18,
     fontWeight: "bold",
-  },
+  } as TextStyle,
   modalContent: {
     marginBottom: 16,
-  },
+  } as ViewStyle,
   modalStatusContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
     gap: 8,
-  },
+  } as ViewStyle,
   modalStatusText: {
     fontSize: 16,
     fontWeight: "600",
-  },
+  } as TextStyle,
   modalInfoItem: {
     marginBottom: 12,
-  },
+  } as ViewStyle,
   modalInfoLabel: {
     fontSize: 14,
     marginBottom: 4,
-  },
+  } as TextStyle,
   modalInfoValue: {
     fontSize: 16,
     fontWeight: "500",
-  },
+  } as TextStyle,
   modalCloseButton: {
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
-  },
+  } as ViewStyle,
   modalCloseButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
-  },
+  } as TextStyle,
 } as const)
 
 const lightStyles = StyleSheet.create({
