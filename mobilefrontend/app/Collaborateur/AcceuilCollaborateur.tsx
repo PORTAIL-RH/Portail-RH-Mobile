@@ -12,6 +12,8 @@ import {
   Platform,
   StatusBar,
   RefreshControl,
+  Modal,
+  FlatList,
 } from "react-native"
 import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -34,6 +36,7 @@ export type RootStackParamList = {
   AjouterDemande: undefined
   Calendar: undefined
   Statistics: undefined
+  Documents: undefined
 }
 
 // Définir le type de navigation
@@ -61,6 +64,21 @@ type RecentRequest = {
   time: string
   startDate?: string
   endDate?: string
+}
+
+// Type pour les formations
+type Formation = {
+  id: string
+  titre?: any // Can be string or object
+  theme?: any // Can be string or object
+  dateDebut: string
+  dateFin?: string
+  texteDemande?: any // Can be string or object
+  lieu?: any // Can be string or object
+  organisme?: any // Can be string or object
+  duree?: any // Can be string, number, or object
+  cout?: any // Can be number or object
+  types?: any // Additional field that might be present
 }
 
 // Type pour les informations utilisateur
@@ -102,6 +120,95 @@ const AccueilCollaborateur = () => {
   const [stableStatsData, setStableStatsData] = useState<StatsResponse | null>(null)
   const [stableUserData, setStableUserData] = useState<{ nom: string; role: string } | null>(null)
   const [dataVersion, setDataVersion] = useState(0)
+  
+  // États pour le modal des formations
+  const [formationsModalVisible, setFormationsModalVisible] = useState(false)
+  const [formations, setFormations] = useState<Formation[]>([])
+  const [formationsLoading, setFormationsLoading] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  // Fonction pour récupérer avec retry
+  const fetchWithRetry = async (url: string, options: any = {}, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, options)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        return await response.json()
+      } catch (error) {
+        if (i === retries - 1) throw error
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
+      }
+    }
+  }
+
+  // Fonction pour récupérer les formations à venir
+  const fetchFormations = useCallback(async (silent = false) => {
+    if (!userId) return []
+    
+    if (!silent) setFormationsLoading(true)
+    try {
+      const token = await AsyncStorage.getItem("userToken")
+      if (!token) {
+        throw new Error("Token non disponible")
+      }
+
+      const data = await fetchWithRetry(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-formation/personnel/${userId}/approved-by-chef1`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+    
+      const now = new Date()
+      const upcoming = (Array.isArray(data) ? data : [])
+        .filter(f => {
+          // More robust date filtering
+          try {
+            return f?.dateDebut && new Date(f.dateDebut) >= now
+          } catch {
+            return false
+          }
+        })
+        .sort((a, b) => {
+          try {
+            return new Date(a.dateDebut) - new Date(b.dateDebut)
+          } catch {
+            return 0
+          }
+        })
+        .slice(0, 10) // Limiter à 10 formations
+      
+      console.log("Formations fetched:", upcoming) // Debug log
+      setFormations(upcoming)
+      
+      return upcoming
+    } catch (error) {
+      console.error("Erreur des formations:", error)
+      return []
+    } finally {
+      if (!silent) setFormationsLoading(false)
+    }
+  }, [userId])
+
+  // Charger l'ID utilisateur au démarrage
+  useEffect(() => {
+    const loadUserId = async () => {
+      try {
+        const userInfoStr = await AsyncStorage.getItem("userInfo")
+        if (userInfoStr) {
+          const parsedInfo = JSON.parse(userInfoStr)
+          setUserId(parsedInfo.id)
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement de l'ID utilisateur:", error)
+      }
+    }
+    loadUserId()
+  }, [])
 
   // Utiliser useApiPooling pour les statistiques et les demandes récentes
   const {
@@ -355,6 +462,50 @@ const AccueilCollaborateur = () => {
     }
   }
 
+  // Ouvrir le modal des formations
+  const openFormationsModal = useCallback(() => {
+    setFormationsModalVisible(true)
+    fetchFormations()
+  }, [fetchFormations])
+
+  // Fermer le modal des formations
+  const closeFormationsModal = useCallback(() => {
+    setFormationsModalVisible(false)
+  }, [])
+
+  // Formater la date
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      })
+    } catch {
+      return dateString
+    }
+  }
+
+  // Formater la durée
+  const formatDuration = (startDate: string, endDate?: string) => {
+    try {
+      const start = new Date(startDate)
+      if (!endDate) return formatDate(startDate)
+      
+      const end = new Date(endDate)
+      const diffTime = Math.abs(end.getTime() - start.getTime())
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      
+      if (diffDays === 1) {
+        return formatDate(startDate)
+      } else {
+        return `${formatDate(startDate)} - ${formatDate(endDate)} (${diffDays} jours)`
+      }
+    } catch {
+      return formatDate(startDate)
+    }
+  }
+
   const displayStatsData = useMemo(() => {
     return (
       stableStatsData || {
@@ -420,6 +571,110 @@ const AccueilCollaborateur = () => {
     }
   }
 
+  // Rendu d'un élément de formation
+  const renderFormationItem = ({ item }: { item: Formation }) => {
+    // Helper function to safely render text values
+    const safeRenderText = (value: any): string => {
+      if (value === null || value === undefined) return ""
+      if (typeof value === "string") return value
+      if (typeof value === "number") return value.toString()
+      if (typeof value === "object") {
+        // If it's an object, try to extract meaningful text
+        if (value.nom || value.name || value.title || value.titre) {
+          return value.nom || value.name || value.title || value.titre
+        }
+        return JSON.stringify(value)
+      }
+      return String(value)
+    }
+
+    return (
+      <View style={[
+        styles.formationCard,
+        isDarkMode ? styles.cardDark : styles.cardLight
+      ]}>
+        <View style={styles.formationHeader}>
+          <View style={styles.formationIconContainer}>
+            <Feather name="book-open" size={20} color="#4CAF50" />
+          </View>
+          <View style={styles.formationInfo}>
+            <Text style={[
+              styles.formationTitle,
+              isDarkMode ? styles.textLight : styles.textDark
+            ]}>
+              {safeRenderText(item.titre || item.theme) || "Formation"}
+            </Text>
+            <Text style={[
+              styles.formationDate,
+              isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+            ]}>
+              {formatDuration(item.dateDebut, item.dateFin)}
+            </Text>
+          </View>
+        </View>
+        
+        {item.texteDemande && (
+          <Text style={[
+            styles.formationDescription,
+            isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+          ]}>
+            {safeRenderText(item.texteDemande)}
+          </Text>
+        )}
+        
+        <View style={styles.formationDetails}>
+          {item.lieu && (
+            <View style={styles.formationDetailItem}>
+              <Feather name="map-pin" size={14} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+              <Text style={[
+                styles.formationDetailText,
+                isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+              ]}>
+                {safeRenderText(item.lieu)}
+              </Text>
+            </View>
+          )}
+          
+          {item.organisme && (
+            <View style={styles.formationDetailItem}>
+              <Feather name="users" size={14} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+              <Text style={[
+                styles.formationDetailText,
+                isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+              ]}>
+                {safeRenderText(item.organisme)}
+              </Text>
+            </View>
+          )}
+          
+          {item.duree && (
+            <View style={styles.formationDetailItem}>
+              <Feather name="clock" size={14} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+              <Text style={[
+                styles.formationDetailText,
+                isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+              ]}>
+                {safeRenderText(item.duree)}
+              </Text>
+            </View>
+          )}
+          
+          {item.cout && (
+            <View style={styles.formationDetailItem}>
+              <Feather name="dollar-sign" size={14} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+              <Text style={[
+                styles.formationDetailText,
+                isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+              ]}>
+                {safeRenderText(item.cout)}€
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    )
+  }
+
   const isLoading = userLoading && statsLoading && !userInfoLocal
 
   return (
@@ -428,7 +683,12 @@ const AccueilCollaborateur = () => {
 
       <BackgroundGradient isDarkMode={isDarkMode} />
 
-      <Navbar isDarkMode={isDarkMode} toggleTheme={toggleTheme} handleLogout={handleLogout} />
+      <Navbar 
+        isDarkMode={isDarkMode} 
+        toggleTheme={toggleTheme} 
+        handleLogout={handleLogout}
+        showBackButton={false}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -454,8 +714,6 @@ const AccueilCollaborateur = () => {
                   <Text style={[styles.userRole, isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary]}>
                     {displayUserData?.role || userRole}
                   </Text>
-
-                
                 </View>
 
                 <View style={styles.avatarContainer}>
@@ -584,7 +842,65 @@ const AccueilCollaborateur = () => {
                   <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
                 </TouchableOpacity>
 
-                
+                {/* Mes documents */}
+                <TouchableOpacity
+                  style={[styles.actionCard, isDarkMode ? styles.cardDark : styles.cardLight]}
+                  onPress={() => navigation.navigate("Documents")}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionIconGradient}
+                  >
+                    <Feather name="folder" size={24} color="#fff" />
+                  </LinearGradient>
+                  <View style={styles.actionCardContent}>
+                    <Text style={[styles.actionCardTitle, isDarkMode ? styles.textLight : styles.textDark]}>
+                      Mes documents
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionCardSubtitle,
+                        isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                      ]}
+                    >
+                      Gérer mes fichiers
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+                </TouchableOpacity>
+
+                {/* Formations à venir - Nouveau bouton */}
+                <TouchableOpacity
+                  style={[styles.actionCard, isDarkMode ? styles.cardDark : styles.cardLight]}
+                  onPress={openFormationsModal}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={["rgba(76, 175, 80, 0.9)", "rgba(56, 142, 60, 0.9)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionIconGradient}
+                  >
+                    <Feather name="book-open" size={24} color="#fff" />
+                  </LinearGradient>
+                  <View style={styles.actionCardContent}>
+                    <Text style={[styles.actionCardTitle, isDarkMode ? styles.textLight : styles.textDark]}>
+                      Formations à venir
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionCardSubtitle,
+                        isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary,
+                      ]}
+                    >
+                      Voir mes formations
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={20} color={isDarkMode ? "#AAAAAA" : "#757575"} />
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -597,7 +913,7 @@ const AccueilCollaborateur = () => {
                   >
                     Mes formations à venir
                   </Text>
-                  <TouchableOpacity onPress={() => navigation.navigate("Demandestot")}>
+                  <TouchableOpacity onPress={openFormationsModal}>
                     <LinearGradient
                       colors={["rgba(48, 40, 158, 0.9)", "rgba(13, 15, 46, 0.9)"]}
                       start={{ x: 0, y: 0 }}
@@ -610,7 +926,7 @@ const AccueilCollaborateur = () => {
                 </View>
 
                 <View style={styles.requestsContainer}>
-                  {displayStatsData.upcomingTrainings.map((training) => (
+                  {displayStatsData.upcomingTrainings.slice(0, 3).map((training) => (
                     <TouchableOpacity
                       key={training.id}
                       style={[
@@ -660,6 +976,80 @@ const AccueilCollaborateur = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Modal des formations */}
+      <Modal
+        visible={formationsModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeFormationsModal}
+      >
+        <SafeAreaView style={[
+          styles.modalContainer,
+          isDarkMode ? styles.darkBackground : styles.lightBackground
+        ]}>
+          <View style={[
+            styles.modalHeader,
+            isDarkMode ? styles.modalHeaderDark : styles.modalHeaderLight
+          ]}>
+            <Text style={[
+              styles.modalTitle,
+              isDarkMode ? styles.textLight : styles.textDark
+            ]}>
+              Formations à venir
+            </Text>
+            <TouchableOpacity
+              onPress={closeFormationsModal}
+              style={styles.modalCloseButton}
+            >
+              <Feather name="x" size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+            </TouchableOpacity>
+          </View>
+
+          {formationsLoading ? (
+            <View style={styles.modalLoadingContainer}>
+              <ActivityIndicator size="large" color={isDarkMode ? "#ffffff" : "#0e135f"} />
+              <Text style={[
+                styles.modalLoadingText,
+                isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+              ]}>
+                Chargement des formations...
+              </Text>
+            </View>
+          ) : formations.length === 0 ? (
+            <View style={styles.modalEmptyContainer}>
+              <Feather name="book-open" size={48} color={isDarkMode ? "#666" : "#CCC"} />
+              <Text style={[
+                styles.modalEmptyText,
+                isDarkMode ? styles.textLight : styles.textDark
+              ]}>
+                Aucune formation à venir
+              </Text>
+              <Text style={[
+                styles.modalEmptySubtext,
+                isDarkMode ? styles.textLightSecondary : styles.textDarkSecondary
+              ]}>
+                Vos prochaines formations approuvées apparaîtront ici
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={formations}
+              renderItem={renderFormationItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.modalListContainer}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={formationsLoading}
+                  onRefresh={() => fetchFormations()}
+                  tintColor={isDarkMode ? "#ffffff" : "#0e135f"}
+                />
+              }
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
 
       <Footer />
     </SafeAreaView>
@@ -719,7 +1109,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
   },
-
   buttonLight: {
     backgroundColor: "#F5F5F5",
     borderColor: "#EEEEEE",
@@ -939,6 +1328,124 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(56, 189, 248, 0.5)",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 3,
+  },
+  // Styles pour le modal des formations
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  modalHeaderLight: {
+    backgroundColor: "#FFFFFF",
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+  },
+  modalHeaderDark: {
+    backgroundColor: "#1a1f38",
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  modalCloseButton: {
+    padding: 8,
+  },
+  modalLoadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  modalLoadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  modalEmptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  modalEmptyText: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  modalEmptySubtext: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  modalListContainer: {
+    padding: 16,
+  },
+  formationCard: {
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    borderLeftColor: "#4CAF50",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  formationHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  formationIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  formationInfo: {
+    flex: 1,
+  },
+  formationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  formationDate: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  formationDescription: {
+    fontSize: 14,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  formationDetails: {
+    gap: 8,
+  },
+  formationDetailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  formationDetailText: {
+    fontSize: 13,
+    flex: 1,
   },
 })
 

@@ -14,6 +14,7 @@ import {
   type ViewStyle,
   type TextStyle,
   SafeAreaView,
+  Modal,
 } from "react-native"
 import {
   ArrowLeft,
@@ -32,6 +33,8 @@ import Toast from "react-native-toast-message"
 import { useNavigation } from "@react-navigation/native"
 import { LinearGradient } from "expo-linear-gradient"
 import BackgroundGradient from "../../Components/BackgroundGradient"
+import axios from "axios"
+import type { Request } from "./Demandes"
 
 const { width, height } = Dimensions.get("window")
 
@@ -61,49 +64,6 @@ interface EditableRequestData {
   }[]
   minuteSortie?: string
   minuteRetour?: string
-}
-
-interface Request {
-  id: string
-  type: string
-  description: string
-  status: "pending" | "approved" | "rejected"
-  date: string
-  time: string
-  details: {
-    startDate?: string
-    endDate?: string
-    duration?: string
-    reason?: string
-    comments?: string
-    approver?: string
-    documents?: string[]
-    filesReponse?: string[]
-    requestDate?: string
-    approvalDate?: string
-    rejectionDate?: string
-    purpose?: string
-    equipment?: string
-    provider?: string
-    location?: string
-    cost?: string
-    amount?: string
-    repaymentPlan?: string
-    titre?: string | { titre: string }
-    typeFormation?: string | { type: string }
-    theme?: string | { theme: string }
-    typeDocument?: string
-    typePreavance?: string
-    montant?: string
-    horaireSortie?: string
-    horaireRetour?: string
-    periodeDebut?: string
-    periodeFin?: string
-  }
-  originalData?: {
-    dateDebut?: string
-    dateFin?: string
-  }
 }
 
 interface ThemeStyles {
@@ -136,9 +96,10 @@ interface DemandesEditFormProps {
   themeStyles: ThemeStyles
   userId: string | null
   onSave: () => void
+  onClose: () => void
 }
 
-const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
+const DemandesEditModal: React.FC<DemandesEditFormProps> = ({
   editingRequest,
   editableData,
   setEditableData,
@@ -146,6 +107,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
   themeStyles,
   userId,
   onSave,
+  onClose,
 }) => {
   const navigation = useNavigation()
 
@@ -162,6 +124,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
   const [datePickerVisible, setDatePickerVisible] = useState(false)
   const [currentPickerMode, setCurrentPickerMode] = useState<"date" | "time">("date")
   const [currentEditField, setCurrentEditField] = useState<string>("")
+  const [showIOSPicker, setShowIOSPicker] = useState(false);
 
   // State for date pickers
   const [dateDebut, setDateDebut] = useState(new Date())
@@ -244,7 +207,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
       setTitres(transformedTitres)
 
       if (editableData.titre) {
-        const matchingTitre = transformedTitres.find((t) => t.name === editableData.titre)
+        const matchingTitre = transformedTitres.find((t: { id: string; name: string }) => t.name === editableData.titre)
         if (matchingTitre) {
           setSelectedTitreId(matchingTitre.id)
           await fetchTypesByTitreId(matchingTitre.id)
@@ -424,82 +387,88 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
   const showDateTimePicker = (mode: "date" | "time", field: string) => {
     setCurrentPickerMode(mode)
     setCurrentEditField(field)
-    setDatePickerVisible(true)
+    if (Platform.OS === 'ios') {
+      setShowIOSPicker(true)
+    } else {
+      setDatePickerVisible(true)
+    }
   }
 
   // Handle date/time selection
   const handleDateTimeChange = (event: any, selectedDate?: Date) => {
-    if (selectedDate) {
-      switch (currentEditField) {
-        case "dateDebut":
-          setDateDebut(selectedDate)
-          // Format date as YYYY-MM-DD for the backend, ensuring correct day
-          const year = selectedDate.getFullYear()
-          const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
-          const day = String(selectedDate.getDate()).padStart(2, "0")
-          const dateDebutStr = `${year}-${month}-${day}`
-
-          setEditableData({
-            ...editableData,
-            startDate: dateDebutStr,
-          })
-
-          // If start date is after end date, update end date
-          if (selectedDate > dateFin) {
-            const newEndDate = new Date(selectedDate)
-            newEndDate.setDate(selectedDate.getDate() + 1)
-            setDateFin(newEndDate)
-
-            const endYear = newEndDate.getFullYear()
-            const endMonth = String(newEndDate.getMonth() + 1).padStart(2, "0")
-            const endDay = String(newEndDate.getDate()).padStart(2, "0")
-            const dateFinStr = `${endYear}-${endMonth}-${endDay}`
-
-            setEditableData((prev) => ({
-              ...prev,
-              endDate: dateFinStr,
-            }))
-          }
-          break
-        case "dateFin":
-          setDateFin(selectedDate)
-          // Format date as YYYY-MM-DD for the backend, ensuring correct day
-          const yearFin = selectedDate.getFullYear()
-          const monthFin = String(selectedDate.getMonth() + 1).padStart(2, "0")
-          const dayFin = String(selectedDate.getDate()).padStart(2, "0")
-          const dateFinStr = `${yearFin}-${monthFin}-${dayFin}`
-
-          setEditableData({
-            ...editableData,
-            endDate: dateFinStr,
-          })
-          break
-        case "horaireSortie":
-          setTimeSortie(selectedDate)
-          const hoursSortie = selectedDate.getHours().toString().padStart(2, "0")
-          const minutesSortie = selectedDate.getMinutes().toString().padStart(2, "0")
-          setEditableData({
-            ...editableData,
-            horaireSortie: hoursSortie,
-            minuteSortie: minutesSortie,
-          })
-          break
-        case "horaireRetour":
-          setTimeRetour(selectedDate)
-          const hoursRetour = selectedDate.getHours().toString().padStart(2, "0")
-          const minutesRetour = selectedDate.getMinutes().toString().padStart(2, "0")
-          setEditableData({
-            ...editableData,
-            horaireRetour: hoursRetour,
-            minuteRetour: minutesRetour,
-          })
-          break
-      }
+    if (Platform.OS === 'ios') {
+      // Don't hide the picker on iOS
+      if (!selectedDate) return
+    } else {
+      setDatePickerVisible(false)
+      if (event.type === 'dismissed' || !selectedDate) return
     }
-    setDatePickerVisible(false)
+
+    console.log("Date selected:", selectedDate, "for field:", currentEditField)
+
+    switch (currentEditField) {
+      case "dateDebut":
+        setDateDebut(selectedDate)
+        // Format date as YYYY-MM-DD for the backend
+        const startDateStr = selectedDate.toISOString().split('T')[0]
+        console.log("Setting start date to:", startDateStr)
+        
+        setEditableData(prev => ({
+          ...prev,
+          startDate: startDateStr
+        }))
+
+        // If start date is after end date, update end date
+        if (selectedDate > dateFin) {
+          setDateFin(selectedDate)
+          setEditableData(prev => ({
+            ...prev,
+            endDate: startDateStr
+          }))
+        }
+        break
+
+      case "dateFin":
+        setDateFin(selectedDate)
+        // Format date as YYYY-MM-DD for the backend
+        const endDateStr = selectedDate.toISOString().split('T')[0]
+        console.log("Setting end date to:", endDateStr)
+        
+        setEditableData(prev => ({
+          ...prev,
+          endDate: endDateStr
+        }))
+        break
+
+      case "horaireSortie":
+        setTimeSortie(selectedDate)
+        const hoursSortie = selectedDate.getHours().toString().padStart(2, "0")
+        const minutesSortie = selectedDate.getMinutes().toString().padStart(2, "0")
+        console.log("Setting sortie time to:", hoursSortie, ":", minutesSortie)
+        
+        setEditableData(prev => ({
+          ...prev,
+          horaireSortie: hoursSortie,
+          minuteSortie: minutesSortie
+        }))
+        break
+
+      case "horaireRetour":
+        setTimeRetour(selectedDate)
+        const hoursRetour = selectedDate.getHours().toString().padStart(2, "0")
+        const minutesRetour = selectedDate.getMinutes().toString().padStart(2, "0")
+        console.log("Setting retour time to:", hoursRetour, ":", minutesRetour)
+        
+        setEditableData(prev => ({
+          ...prev,
+          horaireRetour: hoursRetour,
+          minuteRetour: minutesRetour
+        }))
+        break
+    }
   }
 
-  // Format time
+  // Format time for display
   const formatTime = (date: Date) => {
     const hours = date.getHours().toString().padStart(2, "0")
     const minutes = date.getMinutes().toString().padStart(2, "0")
@@ -704,13 +673,15 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
       text1: title,
       text2: message,
       position: "bottom",
-      visibilityTime: 4000,
+      visibilityTime: 2000,
       autoHide: true,
-    })
+      topOffset: 30,
+      bottomOffset: 40,
+    });
   }
 
   const handleGoBack = () => {
-    navigation.goBack()
+    onClose();
   }
 
   const renderSelector = (items: any[], selectedId: string | null, onSelect: (id: string, name: string) => void) => {
@@ -727,7 +698,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
               style={[styles.selectorItem, selectedId === item.id && styles.activeFilterOption]}
               onPress={() => onSelect(item.id, item.name)}
             >
-              <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333333" }]}>{item.name}</Text>
+              <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>{item.name}</Text>
               {selectedId === item.id && <CheckCircle size={20} color="#9370DB" />}
             </TouchableOpacity>
           ))
@@ -745,7 +716,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
           style={[styles.selectorItem, selectedPeriode === "matin" && styles.activeFilterOption]}
           onPress={() => handlePeriodeSelection("matin", type)}
         >
-          <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333333" }]}>Matin</Text>
+          <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>Matin</Text>
           {selectedPeriode === "matin" && <CheckCircle size={20} color="#9370DB" />}
         </TouchableOpacity>
 
@@ -753,7 +724,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
           style={[styles.selectorItem, selectedPeriode === "après-midi" && styles.activeFilterOption]}
           onPress={() => handlePeriodeSelection("après-midi", type)}
         >
-          <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333333" }]}>Après-midi</Text>
+          <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>Après-midi</Text>
           {selectedPeriode === "après-midi" && <CheckCircle size={20} color="#9370DB" />}
         </TouchableOpacity>
       </View>
@@ -769,7 +740,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
             style={[styles.selectorItem, type.selected && styles.activeFilterOption]}
             onPress={() => selectDocumentType(type.id)}
           >
-            <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333333" }]}>{type.name}</Text>
+            <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>{type.name}</Text>
             {type.selected && <CheckCircle size={20} color="#9370DB" />}
           </TouchableOpacity>
         ))}
@@ -786,7 +757,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
             style={[styles.selectorItem, type.selected && styles.activeFilterOption]}
             onPress={() => selectTypeAvance(type.id)}
           >
-            <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333333" }]}>{type.name}</Text>
+            <Text style={[styles.selectorItemText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>{type.name}</Text>
             {type.selected && <CheckCircle size={20} color="#9370DB" />}
           </TouchableOpacity>
         ))}
@@ -794,32 +765,346 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
     )
   }
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+  const handleUpdate = async () => {
+    if (!editingRequest?.id) {
+      showToast("error", "Erreur", "Impossible de trouver la demande à modifier");
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+      return;
+    }
 
-      {/* Background gradient */}
-      <BackgroundGradient isDarkMode={isDarkMode}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.container}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
-              <ArrowLeft size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-              {editingRequest ? `Modifier ${editingRequest.type}` : "Modifier la demande"}
-            </Text>
-            <View style={{ width: 24 }} />
-          </View>
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+      if (!token) {
+        showToast("error", "Erreur", "Session expirée");
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+        return;
+      }
+
+      let requestData: any = {};
+      const requestType = editingRequest.type.toLowerCase();
+
+      // Only include fields that have been modified
+      if (editableData.description !== editingRequest.description) {
+        requestData.texteDemande = editableData.description;
+      }
+
+      if (requestType.includes("congé")) {
+        if (editableData.startDate) requestData.dateDebut = editableData.startDate;
+        if (editableData.endDate) requestData.dateFin = editableData.endDate;
+        if (editableData.periodeDebut) requestData.snjTempDep = editableData.periodeDebut === "matin" ? "M" : "S";
+        if (editableData.periodeFin) requestData.snjTempRetour = editableData.periodeFin === "matin" ? "M" : "S";
+        if (editableData.duration) requestData.nbrJours = editableData.duration;
+      } 
+      else if (requestType.includes("autorisation")) {
+        if (editableData.startDate) requestData.dateDebut = editableData.startDate;
+        if (editableData.horaireSortie) requestData.horaireSortie = editableData.horaireSortie;
+        if (editableData.minuteSortie) requestData.minuteSortie = editableData.minuteSortie;
+        if (editableData.horaireRetour) requestData.horaireRetour = editableData.horaireRetour;
+        if (editableData.minuteRetour) requestData.minuteRetour = editableData.minuteRetour;
+      } 
+      else if (requestType.includes("document")) {
+        // Add required fields for document requests
+        requestData = {
+          id: editingRequest.id,
+          typeDemande: "Document",
+          texteDemande: editableData.description || editingRequest.description,
+          typeDocument: editableData.typeDocument || editingRequest.details.typeDocument,
+          matPers: editingRequest.details.matPers,
+          codeSoc: editingRequest.details.codeSoc
+        };
+      } 
+      else if (requestType.includes("formation")) {
+        if (editableData.titreId) requestData.titre = { id: editableData.titreId };
+        if (editableData.typeId) requestData.type = { id: editableData.typeId };
+        if (editableData.themeId) requestData.theme = { id: editableData.themeId };
+        if (editableData.startDate) requestData.dateDebut = editableData.startDate;
+        if (editableData.duration) requestData.nbrJours = editableData.duration;
+      } 
+      else if (requestType.includes("pre-avance")) {
+        if (editableData.typePreavance) requestData.type = editableData.typePreavance;
+        if (editableData.montant) requestData.montant = editableData.montant;
+      }
+
+      // Only proceed with update if there are changes
+      if (Object.keys(requestData).length === 0) {
+        showToast("info", "Information", "Aucune modification n'a été effectuée");
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+        return;
+      }
+
+      const response = await axios.put(
+        `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/${getApiEndpoint(requestType)}/${editingRequest.id}`,
+        requestData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        showToast("success", "Succès", "Demande modifiée avec succès");
+        setTimeout(() => {
+          onSave();
+          onClose();
+        }, 2000);
+      }
+    } catch (error: any) {
+      console.error("Error updating request:", error);
+      const errorMessage = error.response?.data?.message || "Erreur lors de la modification de la demande";
+      showToast("error", "Erreur", errorMessage);
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    }
+  };
+
+  const getApiEndpoint = (requestType: string): string => {
+    if (requestType.includes("congé")) return "demande-conge";
+    if (requestType.includes("autorisation")) return "demande-autorisation";
+    if (requestType.includes("document")) return "demande-document";
+    if (requestType.includes("formation")) return "demande-formation";
+    if (requestType.includes("pre-avance")) return "demande-pre-avance";
+    return "";
+  };
+
+  // Initialize form with existing data
+  useEffect(() => {
+    if (editingRequest) {
+      console.log("Initializing form with data:", editingRequest);
+      const details = editingRequest.details;
+      console.log("Original dates from details:", {
+        startDate: details.startDate,
+        endDate: details.endDate,
+        originalData: editingRequest.originalData
+      });
+
+      // Try to get dates from originalData first, then fallback to details
+      const startDateStr = editingRequest.originalData?.dateDebut || details.startDate;
+      const endDateStr = editingRequest.originalData?.dateFin || details.endDate;
+
+      console.log("Using dates:", { startDateStr, endDateStr });
+
+      if (startDateStr) {
+        try {
+          // Handle different date formats
+          let startDate;
+          if (startDateStr.includes('T')) {
+            // Handle ISO format
+            startDate = new Date(startDateStr);
+          } else if (startDateStr.includes('/')) {
+            // Handle DD/MM/YYYY format
+            const [day, month, year] = startDateStr.split('/').map(Number);
+            startDate = new Date(year, month - 1, day);
+          } else {
+            // Handle YYYY-MM-DD format
+            const [year, month, day] = startDateStr.split('-').map(Number);
+            startDate = new Date(year, month - 1, day);
+          }
+          
+          if (!isNaN(startDate.getTime())) {
+            console.log("Setting start date to:", startDate);
+            setDateDebut(startDate);
+          }
+        } catch (error) {
+          console.error("Error parsing start date:", error);
+        }
+      }
+
+      if (endDateStr) {
+        try {
+          // Handle different date formats
+          let endDate;
+          if (endDateStr.includes('T')) {
+            // Handle ISO format
+            endDate = new Date(endDateStr);
+          } else if (endDateStr.includes('/')) {
+            // Handle DD/MM/YYYY format
+            const [day, month, year] = endDateStr.split('/').map(Number);
+            endDate = new Date(year, month - 1, day);
+          } else {
+            // Handle YYYY-MM-DD format
+            const [year, month, day] = endDateStr.split('-').map(Number);
+            endDate = new Date(year, month - 1, day);
+          }
+
+          if (!isNaN(endDate.getTime())) {
+            console.log("Setting end date to:", endDate);
+            setDateFin(endDate);
+          }
+        } catch (error) {
+          console.error("Error parsing end date:", error);
+        }
+      }
+
+      // For autorisation, initialize time fields
+      if (details.horaireSortie && details.minuteSortie) {
+        try {
+          const sortieTime = new Date();
+          sortieTime.setHours(Number(details.horaireSortie), Number(details.minuteSortie), 0);
+          console.log("Setting sortie time to:", sortieTime);
+          setTimeSortie(sortieTime);
+        } catch (error) {
+          console.error("Error setting sortie time:", error);
+        }
+      }
+
+      if (details.horaireRetour && details.minuteRetour) {
+        try {
+          const retourTime = new Date();
+          retourTime.setHours(Number(details.horaireRetour), Number(details.minuteRetour), 0);
+          console.log("Setting retour time to:", retourTime);
+          setTimeRetour(retourTime);
+        } catch (error) {
+          console.error("Error setting retour time:", error);
+        }
+      }
+
+      let initialData: EditableRequestData = {
+        description: editingRequest.description || "",
+        startDate: startDateStr || "",
+        endDate: endDateStr || "",
+        duration: details.nbrJours?.toString() || "",
+        
+        // Document fields
+        typeDocument: details.typeDocument || "",
+        
+        // Formation fields
+        titre: typeof details.titre === 'object' ? details.titre.titre : (details.titre || ""),
+        titreId: typeof details.titre === 'object' ? details.titre.id : undefined,
+        typeFormation: typeof details.typeFormation === 'object' ? details.typeFormation.type : (details.typeFormation || ""),
+        typeId: typeof details.typeFormation === 'object' ? details.typeFormation.id : undefined,
+        theme: typeof details.theme === 'object' ? details.theme.theme : (details.theme || ""),
+        themeId: typeof details.theme === 'object' ? details.theme.id : undefined,
+        
+        // Autorisation fields
+        horaireSortie: details.horaireSortie || "",
+        horaireRetour: details.horaireRetour || "",
+        minuteSortie: details.minuteSortie || "",
+        minuteRetour: details.minuteRetour || "",
+        
+        // Congé fields
+        periodeDebut: editingRequest.originalData?.snjTempDep === "M" ? "matin" : "après-midi",
+        periodeFin: editingRequest.originalData?.snjTempRetour === "M" ? "matin" : "après-midi",
+        
+        // Pre-avance fields
+        typePreavance: details.typePreavance || "",
+        montant: details.montant || "",
+      };
+
+      console.log("Setting initial editable data:", initialData);
+      setEditableData(initialData);
+
+      // Initialize other form state based on the type
+      if (editingRequest.type.toLowerCase().includes("document")) {
+        setSelectedDocumentType(details.typeDocument || "Attestation de travail");
+        setDocumentTypes(prev => prev.map(type => ({
+          ...type,
+          selected: type.name === details.typeDocument
+        })));
+      }
+      
+      if (editingRequest.type.toLowerCase().includes("pre-avance")) {
+        setSelectedTypeAvance(details.typePreavance || "MEDICAL");
+        setTypesAvance(prev => prev.map(type => ({
+          ...type,
+          selected: type.name === details.typePreavance
+        })));
+      }
+    }
+  }, [editingRequest]);
+
+  // Update the onSave button press handler
+  const handleSave = () => {
+    handleUpdate();
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[styles.container, isDarkMode ? styles.darkContainer : styles.lightContainer]}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+    >
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={[
+          styles.modalContainer,
+          isDarkMode ? styles.darkContainer : styles.lightContainer
+        ]}>
+          {Platform.OS === 'ios' ? (
+            // iOS Header
+            <View style={styles.header}>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <ArrowLeft size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+              </TouchableOpacity>
+              <Text style={[
+                styles.headerTitle,
+                isDarkMode ? styles.textLight : styles.textDark
+              ]}>
+                Modifier la demande
+              </Text>
+              <TouchableOpacity
+                onPress={handleSave}
+                style={styles.saveIconButton}
+              >
+                <Save size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // Android Header
+            <>
+              <View style={[
+                styles.statusBarSpace,
+                { backgroundColor: isDarkMode ? '#1a1f38' : '#FFFFFF' }
+              ]} />
+              <View style={[
+                styles.androidHeader,
+                { backgroundColor: isDarkMode ? '#1a1f38' : '#FFFFFF' }
+              ]}>
+                <TouchableOpacity 
+                  style={styles.androidBackButton}
+                  onPress={onClose}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <ArrowLeft size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+                </TouchableOpacity>
+
+                <View style={styles.androidTitleContainer}>
+                  <Text style={[styles.androidTitle, { color: isDarkMode ? "#E0E0E0" : "#333" }]} numberOfLines={1}>
+                    Modifier
+                  </Text>
+                  <Text style={[styles.androidSubtitle, { color: isDarkMode ? "#E0E0E0" : "#333" }]} numberOfLines={1}>
+                    la demande
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.androidSaveButton}
+                  onPress={handleSave}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Save size={24} color={isDarkMode ? "#E0E0E0" : "#333"} />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
 
           <ScrollView
-            style={styles.scrollContainer}
-            contentContainerStyle={styles.contentContainer}
-            keyboardShouldPersistTaps="handled"
+            style={[
+              styles.scrollView,
+              { backgroundColor: isDarkMode ? '#1a1f38' : '#F5F5F5' }
+            ]}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.scrollViewContent,
+              { paddingTop: Platform.OS === 'android' ? 8 : 16 }
+            ]}
           >
             {/* Form Header */}
             <View style={styles.formHeader}>
@@ -831,7 +1116,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                   {editingRequest ? editingRequest.type : "Demande"}
                 </Text>
                 <Text style={[styles.formHeaderSubtitle, { color: isDarkMode ? "#AAAAAA" : "#757575" }]}>
-                  Modifiez les informations de votre demande
+                  Modifiez les champs que vous souhaitez mettre à jour
                 </Text>
               </View>
             </View>
@@ -840,10 +1125,10 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
             <View
               style={[styles.formContainer, { backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "#FFFFFF" }]}
             >
-              {/* Champ de description commun à tous les types */}
+              {/* Description field */}
               <View style={styles.formField}>
                 <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                  Description <Text style={styles.required}>*</Text>
+                  Description
                 </Text>
                 <View
                   style={[
@@ -872,7 +1157,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                 <>
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Date de début <Text style={styles.required}>*</Text>
+                      Date de début
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -897,7 +1182,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Titre <Text style={styles.required}>*</Text>
+                      Titre
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -921,7 +1206,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Type <Text style={styles.required}>*</Text>
+                      Type
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -929,7 +1214,6 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                         {
                           backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "#FFFFFF",
                           borderColor: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
-                          opacity: !selectedTitreId ? 0.6 : 1,
                         },
                       ]}
                       onPress={() => (selectedTitreId ? setShowTypeSelector(!showTypeSelector) : null)}
@@ -954,7 +1238,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Thème <Text style={styles.required}>*</Text>
+                      Thème
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -962,7 +1246,6 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                         {
                           backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.05)" : "#FFFFFF",
                           borderColor: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
-                          opacity: !selectedTypeId ? 0.6 : 1,
                         },
                       ]}
                       onPress={() => (selectedTypeId ? setShowThemeSelector(!showThemeSelector) : null)}
@@ -987,7 +1270,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Nombre de jours <Text style={styles.required}>*</Text>
+                      Nombre de jours
                     </Text>
                     <View
                       style={[
@@ -998,14 +1281,10 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                         },
                       ]}
                     >
-                      <TextInput
-                        style={[styles.formInput, { color: isDarkMode ? "#E0E0E0" : "#333" }]}
-                        value={editableData.duration}
-                        onChangeText={(text) => setEditableData({ ...editableData, duration: text })}
-                        keyboardType="numeric"
-                        placeholderTextColor={isDarkMode ? "#AAAAAA" : "#757575"}
-                        placeholder="Entrez le nombre de jours"
-                      />
+                      <Calendar size={20} color={isDarkMode ? "#CCCCCC" : "#0e135f"} style={styles.inputIcon} />
+                      <Text style={[styles.inputText, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
+                        {editableData.duration || "0"} jour(s)
+                      </Text>
                     </View>
                   </View>
                 </>
@@ -1015,7 +1294,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
               {editingRequest && editingRequest.type.toLowerCase().includes("document") && (
                 <View style={styles.formField}>
                   <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                    Type de document <Text style={styles.required}>*</Text>
+                    Type de document
                   </Text>
                   <TouchableOpacity
                     style={[
@@ -1042,7 +1321,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                 <>
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Type de préavance <Text style={styles.required}>*</Text>
+                      Type de préavance
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1065,7 +1344,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Montant <Text style={styles.required}>*</Text>
+                      Montant
                     </Text>
                     <View
                       style={[
@@ -1095,7 +1374,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                   {/* Date */}
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Date <Text style={styles.required}>*</Text>
+                      Date
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1121,7 +1400,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                   {/* Heure de sortie */}
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Heure de sortie <Text style={styles.required}>*</Text>
+                      Heure de sortie
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1143,7 +1422,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                   {/* Heure de retour */}
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Heure de retour <Text style={styles.required}>*</Text>
+                      Heure de retour
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1169,7 +1448,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                 <>
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Date de début <Text style={styles.required}>*</Text>
+                      Date de début
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1194,7 +1473,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Période de début <Text style={styles.required}>*</Text>
+                      Période de début
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1215,7 +1494,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Date de fin <Text style={styles.required}>*</Text>
+                      Date de fin
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1240,7 +1519,7 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
 
                   <View style={styles.formField}>
                     <Text style={[styles.formFieldLabel, { color: isDarkMode ? "#E0E0E0" : "#333" }]}>
-                      Période de fin <Text style={styles.required}>*</Text>
+                      Période de fin
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1281,97 +1560,136 @@ const DemandesEditForm: React.FC<DemandesEditFormProps> = ({
                   </View>
                 </>
               )}
-
-              {/* Note */}
-              <View style={styles.noteContainer}>
-                <AlertTriangle size={16} color="#FFC107" />
-                <Text style={styles.noteText}>
-                  Les champs marqués d'un <Text style={styles.required}>*</Text> sont obligatoires
-                </Text>
-              </View>
             </View>
           </ScrollView>
+        </View>
+      </SafeAreaView>
 
-          {/* Footer with action buttons */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleGoBack}>
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
+      {/* Android DateTimePicker */}
+      {Platform.OS === 'android' && datePickerVisible && (
+        <DateTimePicker
+          testID="dateTimePicker"
+          value={
+            currentEditField === "dateDebut"
+              ? dateDebut
+              : currentEditField === "dateFin"
+                ? dateFin
+                : currentEditField === "horaireSortie"
+                  ? timeSortie
+                  : timeRetour
+          }
+          mode={currentPickerMode}
+          is24Hour={true}
+          display="default"
+          onChange={handleDateTimeChange}
+          minimumDate={currentEditField === "dateFin" ? dateDebut : undefined}
+          maximumDate={currentEditField === "dateDebut" ? dateFin : undefined}
+        />
+      )}
 
-            <TouchableOpacity style={styles.saveButton} onPress={onSave}>
-              <LinearGradient
-                colors={["rgba(13, 15, 46, 0.9)", "rgba(13, 15, 46, 0.9)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.saveButtonGradient}
-              >
-                <Save size={18} color="#FFFFFF" style={styles.saveButtonIcon} />
-                <Text style={styles.saveButtonText}>Enregistrer</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+      {/* iOS DateTimePicker Modal */}
+      {Platform.OS === 'ios' && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showIOSPicker}
+          onRequestClose={() => {
+            setShowIOSPicker(false);
+          }}
+        >
+          <View style={styles.centeredView}>
+            <View style={[styles.modalView, { backgroundColor: isDarkMode ? '#1a1f38' : '#FFFFFF' }]}>
+              <View style={styles.pickerHeader}>
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => setShowIOSPicker(false)}
+                >
+                  <Text style={[styles.pickerButtonText, { color: isDarkMode ? '#E0E0E0' : '#007AFF' }]}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => {
+                    setShowIOSPicker(false);
+                    // The date will already be updated by handleDateTimeChange
+                  }}
+                >
+                  <Text style={[styles.pickerButtonText, { color: isDarkMode ? '#E0E0E0' : '#007AFF' }]}>OK</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                testID="dateTimePicker"
+                value={
+                  currentEditField === "dateDebut"
+                    ? dateDebut
+                    : currentEditField === "dateFin"
+                      ? dateFin
+                      : currentEditField === "horaireSortie"
+                        ? timeSortie
+                        : timeRetour
+                }
+                mode={currentPickerMode}
+                is24Hour={true}
+                display="spinner"
+                onChange={handleDateTimeChange}
+                minimumDate={currentEditField === "dateFin" ? dateDebut : undefined}
+                maximumDate={currentEditField === "dateDebut" ? dateFin : undefined}
+                style={styles.iosDatePicker}
+              />
+            </View>
           </View>
+        </Modal>
+      )}
 
-          {/* DateTimePicker */}
-          {datePickerVisible && (
-            <DateTimePicker
-              value={
-                currentEditField === "dateDebut"
-                  ? dateDebut
-                  : currentEditField === "dateFin"
-                    ? dateFin
-                    : currentEditField === "horaireSortie"
-                      ? timeSortie
-                      : timeRetour
-              }
-              mode={currentPickerMode}
-              is24Hour={true}
-              display="default"
-              onChange={handleDateTimeChange}
-            />
-          )}
-
-          <Toast />
-        </KeyboardAvoidingView>
-      </BackgroundGradient>
-    </SafeAreaView>
+      <Toast />
+    </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   container: {
     flex: 1,
+  },
+  modalContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  darkContainer: {
+    backgroundColor: "#1a1f38",
+  },
+  lightContainer: {
+    backgroundColor: "#FFFFFF",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(150, 150, 150, 0.2)",
+    borderBottomColor: "rgba(0,0,0,0.1)",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "600",
   },
-  backButton: {
+  textLight: {
+    color: "#E0E0E0",
+  },
+  textDark: {
+    color: "#333",
+  },
+  closeButton: {
     padding: 8,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
   },
-  scrollContainer: {
+  saveIconButton: {
+    padding: 8,
+  },
+  scrollView: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 16,
-    paddingBottom: 100,
+  scrollViewContent: {
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 34 : 16,
   },
   formHeader: {
     flexDirection: "row",
@@ -1472,7 +1790,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  saveButton: {
+  saveButtonIcon: {
+    padding: 8,
+    marginRight: 8,
+  },
+  saveButtonContainer: {
     flex: 1,
     marginLeft: 8,
     borderRadius: 16,
@@ -1485,9 +1807,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
     height: "100%",
-  },
-  saveButtonIcon: {
-    marginRight: 8,
   },
   saveButtonText: {
     fontSize: 16,
@@ -1537,6 +1856,80 @@ const styles = StyleSheet.create({
     textAlign: "center",
     padding: 12,
   },
+  statusBarSpace: {
+    height: StatusBar.currentHeight || 24,
+    width: '100%',
+  },
+  androidHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    height: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    elevation: 4,
+  },
+  androidBackButton: {
+    padding: 12,
+    marginLeft: 0,
+  },
+  androidTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  androidTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  androidSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  androidSaveButton: {
+    padding: 12,
+    marginRight: 0,
+  },
+  centeredView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalView: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 8,
+  },
+  pickerButton: {
+    padding: 8,
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  iosDatePicker: {
+    height: 200,
+    width: '100%',
+  },
 })
 
-export default DemandesEditForm
+export default DemandesEditModal

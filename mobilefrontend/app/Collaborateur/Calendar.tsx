@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import {
   View,
   Text,
@@ -11,6 +11,10 @@ import {
   Dimensions,
   RefreshControl,
   Modal,
+  ViewStyle,
+  TextStyle,
+  Platform,
+  StatusBar,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -26,6 +30,8 @@ import {
   XCircle,
 } from "lucide-react-native"
 import Footer from "../Components/Footer"
+import LeaveDaysInfo from "../Components/LeaveDaysInfo"
+
 import { API_CONFIG } from "../config/apiConfig"
 import useApiPooling from "../useApiPooling"
 
@@ -98,12 +104,7 @@ const CalendarPage = () => {
         throw new Error("Failed to fetch user information")
       }
 
-      const data = await response.json()
-      return {
-        nom: data.nom || "User",
-        prenom: data.prenom || "",
-        role: data.role || "Collaborateur",
-      }
+      return await response.json()
     },
     storageKey: "user_profile_data",
     poolingInterval: 300000,
@@ -117,55 +118,43 @@ const CalendarPage = () => {
     refresh: refreshEvents,
   } = useApiPooling<CalendarEvent[]>({
     apiCall: async () => {
-      if (!userId) {
-        throw new Error("User ID not available")
+      const [userId, token] = await Promise.all([
+        AsyncStorage.getItem("userId"),
+        AsyncStorage.getItem("userToken")
+      ]);
+
+      if (!userId || !token) {
+        throw new Error("User ID or token not available");
       }
 
-      const token = await AsyncStorage.getItem("userToken")
-      if (!token) {
-        throw new Error("Authentication token not available")
-      }
-
-      const response = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}`, {
+      const leaveResponse = await fetch(`${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/personnel/${userId}/approved-by-chef1`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
 
-      if (!response.ok) {
+      if (!leaveResponse.ok) {
         throw new Error("Failed to fetch leave requests")
       }
 
-      const conges = await response.json()
-      return mapEvents(conges, "congé")
+      const conges = await leaveResponse.json()
+
+      return conges.map((conge: any) => ({
+        id: conge.id || conge._id,
+        title: `Demande de congé`,
+        type: "congé",
+        startDate: new Date(conge.dateDebut),
+        endDate: new Date(conge.dateFin || conge.dateDebut),
+        status: "approved",
+        duration: conge.nbrJours ? `${conge.nbrJours} jour(s)` : "1 jour",
+        comment: conge.texteDemande || conge.description || "",
+      }))
     },
     storageKey: "user_calendar_events",
     poolingInterval: 60000,
     initialData: [],
     dependsOnAuth: true,
   })
-
-  const mapEvents = (data: any[], type: string): CalendarEvent[] => {
-    if (!Array.isArray(data)) return []
-
-    return data
-      .filter((item) => item.dateDebut && item.reponseChef === "O")
-      .map((item) => {
-        const startDate = new Date(item.dateDebut)
-        const endDate = item.dateFin ? new Date(item.dateFin) : startDate
-
-        return {
-          id: item.id_libre_demande || item.id,
-          title: `Demande de ${type}`,
-          type: type,
-          startDate: startDate,
-          endDate: endDate,
-          status: "approved",
-          duration: item.nbrJours ? `${item.nbrJours} jour(s)` : "1 jour",
-          comment: item.texteDemande || "",
-        }
-      })
-  }
 
   useEffect(() => {
     const loadThemePreference = async () => {
@@ -185,7 +174,6 @@ const CalendarPage = () => {
     const newTheme = isDarkMode ? "light" : "dark"
     setIsDarkMode(!isDarkMode)
     try {
-      await AsyncStorage.setItem("theme", newTheme)
       await AsyncStorage.setItem("@theme_mode", newTheme)
     } catch (error) {
       console.error("Error saving theme preference:", error)
@@ -194,8 +182,11 @@ const CalendarPage = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await Promise.all([refreshUserData(true), refreshEvents(true)])
-    setRefreshing(false)
+    try {
+      await Promise.all([refreshUserData(true), refreshEvents(true)])
+    } finally {
+      setRefreshing(false)
+    }
   }, [refreshUserData, refreshEvents])
 
   const themeStyles = isDarkMode ? darkStyles : lightStyles
@@ -288,15 +279,40 @@ const CalendarPage = () => {
 
   return (
     <SafeAreaView style={[styles.container, themeStyles.container]}>
-      <View style={[styles.header, themeStyles.header]}>
+      <StatusBar
+        backgroundColor={isDarkMode ? '#1F2846' : '#FFFFFF'}
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={Platform.OS === 'android'}
+      />
+      <View style={[
+        styles.header, 
+        themeStyles.header,
+        Platform.OS === 'android' && styles.androidHeader
+      ]}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("AccueilCollaborateur")}>
+          <TouchableOpacity 
+            style={[
+              styles.backButton,
+              Platform.OS === 'android' && styles.androidBackButton
+            ]} 
+            onPress={() => navigation.navigate("AccueilCollaborateur")}
+          >
             <ArrowLeft size={22} color={isDarkMode ? "#E0E0E0" : "#333"} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, themeStyles.text]}>Calendrier des congés</Text>
+          <Text style={[
+            styles.headerTitle, 
+            themeStyles.text,
+            Platform.OS === 'android' && styles.androidHeaderTitle
+          ]}>Calendrier des congés</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconButton} onPress={toggleTheme}>
+          <TouchableOpacity 
+            style={[
+              styles.iconButton,
+              Platform.OS === 'android' && styles.androidIconButton
+            ]} 
+            onPress={toggleTheme}
+          >
             {isDarkMode ? <Sun size={22} color="#E0E0E0" /> : <Moon size={22} color="#333" />}
           </TouchableOpacity>
         </View>
@@ -318,13 +334,11 @@ const CalendarPage = () => {
             <View style={styles.userInfo}>
               <CalendarIcon size={24} color={isDarkMode ? "#4285F4" : "#4285F4"} />
               <Text style={[styles.userName, themeStyles.text]}>
-                {userData ? `${userData.prenom} ${userData.nom}` : "Calendrier"}
+                {userData ? `${userData.nom}` : "Calendrier"}
               </Text>
             </View>
-            <Text style={[styles.calendarSubtitle, themeStyles.text]}>Nombre total de jours congés par an :</Text>
-
+            <LeaveDaysInfo isDarkMode={isDarkMode} />
             <Text style={[styles.calendarSubtitle, themeStyles.subtleText]}>Vos congés approuvés</Text>
-
           </View>
 
           <View style={[styles.monthNavigation, themeStyles.card]}>
@@ -522,7 +536,7 @@ const CalendarPage = () => {
         </View>
       </Modal>
 
-      <Footer />
+      <Footer/>
     </SafeAreaView>
   )
 }
@@ -530,7 +544,7 @@ const CalendarPage = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
+  } as ViewStyle,
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -538,63 +552,78 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    paddingTop: 40,
-  },
+    paddingTop: Platform.OS === 'ios' ? 40 : StatusBar.currentHeight || 0,
+  } as ViewStyle,
+  androidHeader: {
+    paddingTop: (StatusBar.currentHeight || 0) + 8,
+    elevation: 4,
+    height: Platform.OS === 'android' ? 56 + (StatusBar.currentHeight || 0) : 'auto',
+  } as ViewStyle,
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-  },
+  } as ViewStyle,
   backButton: {
     padding: 8,
     marginRight: 8,
-  },
+  } as ViewStyle,
+  androidBackButton: {
+    padding: 12,
+    marginLeft: -4,
+  } as ViewStyle,
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
-  },
+  } as TextStyle,
+  androidHeaderTitle: {
+    fontSize: 18,
+  } as TextStyle,
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-  },
+  } as ViewStyle,
   iconButton: {
     padding: 8,
     borderRadius: 20,
     marginLeft: 8,
-  },
+  } as ViewStyle,
+  androidIconButton: {
+    padding: 12,
+  } as ViewStyle,
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
+  } as ViewStyle,
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-  },
+  } as TextStyle,
   scrollContainer: {
     flex: 1,
-  },
+  } as ViewStyle,
   scrollContent: {
     padding: 16,
     paddingBottom: 80,
-  },
+  } as ViewStyle,
   calendarHeader: {
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
-  },
+  } as ViewStyle,
   userName: {
     fontSize: 18,
     fontWeight: "600",
     marginLeft: 8,
-  },
+  } as TextStyle,
   calendarSubtitle: {
     fontSize: 14,
-  },
+  } as TextStyle,
   monthNavigation: {
     flexDirection: "row",
     alignItems: "center",
@@ -602,239 +631,239 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   monthButton: {
     padding: 8,
-  },
+  } as ViewStyle,
   monthTitle: {
     fontSize: 18,
     fontWeight: "600",
     textTransform: "capitalize",
-  },
+  } as TextStyle,
   calendarContainer: {
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 16,
-  },
+  } as ViewStyle,
   daysOfWeek: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#EEEEEE",
-  },
+  } as ViewStyle,
   dayOfWeekCell: {
     flex: 1,
     padding: 10,
     alignItems: "center",
-  },
+  } as ViewStyle,
   dayOfWeekText: {
     fontSize: 14,
     fontWeight: "500",
-  },
+  } as TextStyle,
   calendarGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-  },
+  } as ViewStyle,
   calendarCell: {
     width: `${100 / 7}%`,
     aspectRatio: 1,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-  },
+  } as ViewStyle,
   emptyCell: {
     backgroundColor: "transparent",
-  },
+  } as ViewStyle,
   todayCell: {
     backgroundColor: "rgba(0, 51, 133, 0.88)",
     borderRadius: 20,
-  },
+  } as ViewStyle,
   selectedCell: {
     backgroundColor: "#4285F4",
-  },
+  } as ViewStyle,
   approvedCell: {
     backgroundColor: "rgba(76, 175, 80, 0.2)",
-  },
+  } as ViewStyle,
   calendarDayText: {
     fontSize: 16,
     fontWeight: "500",
-  },
+  } as TextStyle,
   todayText: {
     fontWeight: "bold",
-  },
+  } as TextStyle,
   selectedText: {
     color: "white",
-  },
+  } as TextStyle,
   approvedText: {
     color: "#4CAF50",
     fontWeight: "bold",
-  },
+  } as TextStyle,
   legendContainer: {
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   legendTitle: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 12,
-  },
+  } as TextStyle,
   legendItems: {
     flexDirection: "row",
     justifyContent: "space-between",
-  },
+  } as ViewStyle,
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
-  },
+  } as ViewStyle,
   legendColorBox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     marginRight: 8,
-  },
+  } as ViewStyle,
   legendText: {
     fontSize: 14,
-  },
+  } as TextStyle,
   sectionContainer: {
     marginBottom: 24,
-  },
+  } as ViewStyle,
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 12,
-  },
+  } as TextStyle,
   emptyEvents: {
     padding: 20,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-  },
+  } as ViewStyle,
   emptyEventsText: {
     fontSize: 16,
-  },
+  } as TextStyle,
   eventCard: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     position: "relative",
     overflow: "hidden",
-  },
+  } as ViewStyle,
   eventCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-  },
+  } as ViewStyle,
   eventTypeContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
+  } as ViewStyle,
   eventType: {
     fontSize: 16,
     fontWeight: "600",
-  },
+  } as TextStyle,
   eventDuration: {
     fontSize: 14,
-  },
+  } as TextStyle,
   eventDates: {
     marginBottom: 12,
-  },
+  } as ViewStyle,
   dateContainer: {
     flexDirection: "row",
     marginBottom: 4,
-  },
+  } as ViewStyle,
   dateLabel: {
     fontSize: 14,
     width: 30,
-  },
+  } as TextStyle,
   dateValue: {
     fontSize: 14,
     fontWeight: "500",
-  },
+  } as TextStyle,
   eventComment: {
     fontSize: 14,
     fontStyle: "italic",
-  },
+  } as TextStyle,
   eventStatusBar: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
     width: 4,
-  },
+  } as ViewStyle,
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-  },
+  } as ViewStyle,
   modalContainer: {
     width: "90%",
     maxHeight: "80%",
     borderRadius: 12,
     padding: 16,
-  },
+  } as ViewStyle,
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
-  },
+  } as ViewStyle,
   modalTitle: {
     fontSize: 18,
     fontWeight: "bold",
-  },
+  } as TextStyle,
   modalContent: {
     marginBottom: 16,
-  },
+  } as ViewStyle,
   modalStatusContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
     gap: 8,
-  },
+  } as ViewStyle,
   modalStatusText: {
     fontSize: 16,
     fontWeight: "600",
-  },
+  } as TextStyle,
   modalInfoItem: {
     marginBottom: 12,
-  },
+  } as ViewStyle,
   modalInfoLabel: {
     fontSize: 14,
     marginBottom: 4,
-  },
+  } as TextStyle,
   modalInfoValue: {
     fontSize: 16,
     fontWeight: "500",
-  },
+  } as TextStyle,
   modalCloseButton: {
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
-  },
+  } as ViewStyle,
   modalCloseButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
-  },
-})
+  } as TextStyle,
+} as const)
 
 const lightStyles = StyleSheet.create({
   container: {
     backgroundColor: "#F5F5F5",
-  },
+  } as ViewStyle,
   header: {
     backgroundColor: "#FFFFFF",
-    borderBottomColor: "#EEEEEE",
-  },
+    borderBottomColor: Platform.OS === 'android' ? 'transparent' : "#EEEEEE",
+  } as ViewStyle,
   text: {
     color: "#333333",
-  },
+  } as TextStyle,
   subtleText: {
     color: "#757575",
-  },
+  } as TextStyle,
   card: {
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",
@@ -842,28 +871,28 @@ const lightStyles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 2,
-  },
+  } as ViewStyle,
 })
 
 const darkStyles = StyleSheet.create({
   container: {
     backgroundColor: "#1a1f38",
-  },
+  } as ViewStyle,
   header: {
     backgroundColor: "#1F2846",
-    borderBottomColor: "#1a1f38",
-  },
+    borderBottomColor: Platform.OS === 'android' ? 'transparent' : "#1a1f38",
+  } as ViewStyle,
   text: {
     color: "#E0E0E0",
-  },
+  } as TextStyle,
   subtleText: {
     color: "#AAAAAA",
-  },
+  } as TextStyle,
   card: {
     backgroundColor: "#1F2846",
     borderColor: "#1a1f38",
     borderWidth: 1,
-  },
+  } as ViewStyle,
 })
 
 export default CalendarPage

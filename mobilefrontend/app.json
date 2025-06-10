@@ -1,26 +1,43 @@
 {
   "expo": {
-    "name": "mobilefrontend",
+    "name": "portailrh-mobile",
     "slug": "mobilefrontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "portailrh",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.portailrh.mobilefrontend"
+      "bundleIdentifier": "com.portailrh.mobilefrontend",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["portailrh"] 
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.portailrh.mobilefrontend"
-    },
-    "devDependencies": {
-      "@react-native-community/cli": "latest"
+      "package": "com.portailrh.mobilefrontend",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "portailrh",
+              "host": "reset-password" 
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -38,7 +55,15 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true 
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

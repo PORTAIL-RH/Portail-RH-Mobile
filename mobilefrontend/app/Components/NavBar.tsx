@@ -22,7 +22,7 @@ type NavBarProps = {
   handleLogout: () => void
 }
 
-const NavBar = ({ showBackButton = false, isDarkMode, toggleTheme, handleLogout }: NavBarProps) => {
+const NavBar = ({ title, showBackButton = false, isDarkMode, toggleTheme, handleLogout }: NavBarProps) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { unviewedCount , markAllAsRead } = useNotifications()
 
@@ -35,17 +35,14 @@ const NavBar = ({ showBackButton = false, isDarkMode, toggleTheme, handleLogout 
 
   const handleLogoutPress = async () => {
     try {
-      await AsyncStorage.removeItem("userToken")
-      await AsyncStorage.removeItem("userId")
-      await AsyncStorage.removeItem("userInfo")
-      await AsyncStorage.removeItem("userCodeSoc")
-      await AsyncStorage.removeItem("userService")
-      await AsyncStorage.removeItem("theme")
+      // Clear all AsyncStorage data
+      await AsyncStorage.clear();
 
       Toast.show({
         type: "success",
-        text1: "Logged Out",
-        text2: "You have been logged out successfully.",
+        text1: "Déconnexion réussie",
+        text2: "Vous avez été déconnecté avec succès.",
+        visibilityTime: 2000,
       })
 
       navigation.navigate("Authentification")
@@ -53,8 +50,9 @@ const NavBar = ({ showBackButton = false, isDarkMode, toggleTheme, handleLogout 
       console.error("Error logging out:", error)
       Toast.show({
         type: "error",
-        text1: "Error",
-        text2: "Failed to log out. Please try again.",
+        text1: "Erreur",
+        text2: "Échec de la déconnexion. Veuillez réessayer.",
+        visibilityTime: 2000,
       })
     }
   }
@@ -77,12 +75,19 @@ const NavBar = ({ showBackButton = false, isDarkMode, toggleTheme, handleLogout 
               source={require("../../assets/images/logo.png")}
               style={[
                 styles.logo,
-                isDarkMode && { tintColor: "white" }, // Only apply white tint in dark mode
-                ]}              
-                resizeMode="contain"
-              />
+                isDarkMode ? { tintColor: '#FFFFFF' } : { tintColor: undefined }
+              ]}
+              resizeMode="contain"
+            />
           </View>
-          
+        )}
+        {title && (
+          <Text style={[
+            styles.headerTitle,
+            isDarkMode ? styles.textLight : styles.textDark
+          ]}>
+            {title}
+          </Text>
         )}
       </View>
 
@@ -231,6 +236,11 @@ const styles = StyleSheet.create({
   },
   textDark: {
     color: "#1a1f38",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginLeft: 12,
   },
 })
 
