@@ -82,7 +82,7 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    setApiConfig("http://172.20.10.7", "8080");
+    setApiConfig("http://192.168.1.32", "8080");
   }, []);
 
   if (!fontsLoaded && !fontError) {

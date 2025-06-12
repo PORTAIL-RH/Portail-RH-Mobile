@@ -966,7 +966,7 @@ const DemandesPage = () => {
       borderColor: "rgba(255,255,255,0.1)",
     },
     activeFilterOption: {
-      backgroundColor: "rgba(147,112,219,0.3)",
+      backgroundColor: "rgba(18, 5, 46, 0.1)",
     },
     detailsActionButton: {
       backgroundColor: "#0A84FF",
@@ -1053,10 +1053,10 @@ const DemandesPage = () => {
       borderColor: "#E0E0E0",
     },
     activeFilterOption: {
-      backgroundColor: "rgba(147, 112, 219, 0.1)",
+      backgroundColor: "rgba(18, 5, 46, 0.1)",
     },
     detailsActionButton: {
-      backgroundColor: "#9370DB",
+      backgroundColor: "#121527",
     },
     detailsActionButtonText: {
       color: "#FFFFFF",
@@ -1100,7 +1100,7 @@ const DemandesPage = () => {
     <View style={themeStyles.spinnerContainer}>
       <ActivityIndicator 
         size="large" 
-        color="#9370DB"
+        color="#121527"
       />
       <Text style={themeStyles.spinnerText}>{message}</Text>
     </View>
@@ -1111,7 +1111,7 @@ const DemandesPage = () => {
     <View style={themeStyles.loadingOverlay}>
       <ActivityIndicator 
         size="large" 
-        color="#9370DB"
+        color="#121527"
       />
       <Text style={themeStyles.spinnerText}>{message}</Text>
     </View>

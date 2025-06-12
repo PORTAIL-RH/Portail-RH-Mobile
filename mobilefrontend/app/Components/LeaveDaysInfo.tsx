@@ -1,21 +1,97 @@
-import React from "react"
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native"
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_CONFIG } from "../config/apiConfig"; // Make sure to import your API config
 
 type LeaveDaysInfoProps = {
-  isDarkMode: boolean
+  isDarkMode: boolean;
+};
+
+interface LeaveData {
+  remainingDays: number;
+  totalDaysUsed: number;
+  status: string;
+  maxDaysPerYear: number;
+  year: number;
+  matPersId: string;
 }
 
 const LeaveDaysInfo: React.FC<LeaveDaysInfoProps> = ({ isDarkMode }) => {
-  // Example data - replace with your actual data fetching logic
-  const leaveData = {
-    totalDaysUsed: 5,
-    remainingDays: 25,
-    maxDaysPerYear: 30,
-    year: new Date().getFullYear(),
+  const [leaveData, setLeaveData] = useState<LeaveData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const theme = isDarkMode ? darkTheme : lightTheme;
+  const styles = createStyles(theme);
+
+  useEffect(() => {
+    const fetchLeaveData = async () => {
+      try {
+        const userId = await AsyncStorage.getItem("userId");
+        if (!userId) {
+          throw new Error("User ID not found");
+        }
+
+        const token = await AsyncStorage.getItem("userToken");
+        if (!token) {
+          throw new Error("Authentication token not found");
+        }
+
+        const response = await fetch(
+          `${API_CONFIG.BASE_URL}:${API_CONFIG.PORT}/api/demande-conge/days-used/${userId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data: LeaveData = await response.json();
+        if (data.status !== "success") {
+          throw new Error("Failed to fetch leave data");
+        }
+
+        setLeaveData(data);
+      } catch (err) {
+        console.error("Error fetching leave data:", err);
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeaveData();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+      </View>
+    );
   }
 
-  const theme = isDarkMode ? darkTheme : lightTheme
-  const styles = createStyles(theme)
+  if (error) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={[styles.daysLabel, { color: "#FF0000" }]}>
+          Error: {error}
+        </Text>
+      </View>
+    );
+  }
+
+  if (!leaveData) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={styles.daysLabel}>No leave data available</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -38,9 +114,10 @@ const LeaveDaysInfo: React.FC<LeaveDaysInfoProps> = ({ isDarkMode }) => {
         Total jours congés par an: {leaveData.maxDaysPerYear}
       </Text>
     </View>
-  )
-}
+  );
+};
 
+// Keep your existing theme and style definitions
 const lightTheme = {
   background: '#FFFFFF',
   card: '#F8F9FA',
@@ -48,7 +125,7 @@ const lightTheme = {
   textSecondary: '#6C757D',
   accent: '#0D6EFD',
   success: '#198754',
-}
+};
 
 const darkTheme = {
   background: '#1F2846',
@@ -57,7 +134,7 @@ const darkTheme = {
   textSecondary: '#ADB5BD',
   accent: '#4D8AF0',
   success: '#2AAA6E',
-}
+};
 
 const createStyles = (theme: any) => StyleSheet.create({
   container: {
@@ -107,6 +184,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
     textAlign: "center",
   },
-})
+});
 
-export default LeaveDaysInfo
+export default LeaveDaysInfo;
