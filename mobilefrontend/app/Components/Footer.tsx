@@ -133,12 +133,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.1)",
-    height: 60,
+    height: 70,
   },
   navItem: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 4,
+    paddingVertical: 9,
     width: width / 5,
   },
   navLabel: {
