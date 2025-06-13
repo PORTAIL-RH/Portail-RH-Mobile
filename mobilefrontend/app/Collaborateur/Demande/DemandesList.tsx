@@ -246,7 +246,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
 
     let icon;
     if (lowerCaseType.includes("congé")) {
-      icon = <Calendar size={24} color={isDarkMode ? "#9370DB" : "#9370DB"} />;
+      icon = <Calendar size={24} color={isDarkMode ? "#2a325b" : "#2a325b"} />;
     } else if (lowerCaseType.includes("formation")) {
       icon = <GraduationCap size={24} color={isDarkMode ? "#2196F3" : "#2196F3"} />;
     } else if (lowerCaseType.includes("document")) {
@@ -308,7 +308,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
         color = "#FFC107";
         break;
       default:
-        color = "#9370DB";
+        color = "#2a325b";
     }
 
     cacheManager.setComputed(cacheKey, color);
@@ -456,7 +456,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
     <View style={[styles.loadingContainer, themeStyles?.spinnerContainer]}>
       <ActivityIndicator 
         size="large" 
-        color="#9370DB"
+        color="#2a325b"
       />
       <Text style={[styles.loadingText, themeStyles?.spinnerText || themeStyles?.text]}>
         {message}
@@ -473,7 +473,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
       </Text>
       {searchQuery && (
         <TouchableOpacity onPress={clearSearch} style={styles.clearSearchButton}>
-          <Text style={[styles.clearSearchText, { color: "#9370DB" }]}>
+          <Text style={[styles.clearSearchText, { color: "#2a325b" }]}>
             Effacer la recherche
           </Text>
         </TouchableOpacity>
@@ -574,8 +574,8 @@ const DemandesList: React.FC<DemandesListProps> = ({
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
-                colors={["#9370DB"]}
-                tintColor="#9370DB"
+                colors={["#2a325b"]}
+                tintColor="#2a325b"
                 title="Actualisation..."
                 titleColor={isDarkMode ? "#FFFFFF" : "#333333"}
               />
@@ -620,7 +620,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                       {getStatusText(request)}
                     </Text>
                   </View>
-                  <ChevronRight size={20} color={isDarkMode ? "#9370DB" : "#9370DB"} />
+                  <ChevronRight size={20} color={isDarkMode ? "#2a325b" : "#2a325b"} />
                 </View>
               </View>
             </TouchableOpacity>
@@ -673,7 +673,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                 >
                   Tous les statuts
                 </Text>
-                {activeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
+                {activeFilter === "all" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -696,7 +696,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     En attente
                   </Text>
                 </View>
-                {activeFilter === "pending" && <CheckCircle size={20} color="#9370DB" />}
+                {activeFilter === "pending" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -719,7 +719,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Approuvées
                   </Text>
                 </View>
-                {activeFilter === "approved" && <CheckCircle size={20} color="#9370DB" />}
+                {activeFilter === "approved" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -742,7 +742,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Rejetées
                   </Text>
                 </View>
-                {activeFilter === "rejected" && <CheckCircle size={20} color="#9370DB" />}
+                {activeFilter === "rejected" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               {/* Filter by type */}
@@ -765,7 +765,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                 >
                   Tous les types
                 </Text>
-                {activeTypeFilter === "all" && <CheckCircle size={20} color="#9370DB" />}
+                {activeTypeFilter === "all" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -777,7 +777,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                 onPress={() => applyTypeFilter("conge")}
               >
                 <View style={styles.filterOptionContent}>
-                  <Calendar size={20} color="#9370DB" />
+                  <Calendar size={20} color="#2a325b" />
                   <Text
                     style={[
                       styles.filterOptionText,
@@ -788,7 +788,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Congés
                   </Text>
                 </View>
-                {activeTypeFilter === "conge" && <CheckCircle size={20} color="#9370DB" />}
+                {activeTypeFilter === "conge" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -811,7 +811,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Formations
                   </Text>
                 </View>
-                {activeTypeFilter === "formation" && <CheckCircle size={20} color="#9370DB" />}
+                {activeTypeFilter === "formation" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -834,7 +834,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Avances
                   </Text>
                 </View>
-                {activeTypeFilter === "avance" && <CheckCircle size={20} color="#9370DB" />}
+                {activeTypeFilter === "avance" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -857,7 +857,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Documents
                   </Text>
                 </View>
-                {activeTypeFilter === "document" && <CheckCircle size={20} color="#9370DB" />}
+                {activeTypeFilter === "document" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -880,7 +880,7 @@ const DemandesList: React.FC<DemandesListProps> = ({
                     Autorisations
                   </Text>
                 </View>
-                {activeTypeFilter === "autorisation" && <CheckCircle size={20} color="#9370DB" />}
+                {activeTypeFilter === "autorisation" && <CheckCircle size={20} color="#2a325b" />}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -945,7 +945,7 @@ const styles = StyleSheet.create({
   activeFilterChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#9370DB",
+    backgroundColor: "#2a325b",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -1120,7 +1120,7 @@ const styles = StyleSheet.create({
   },
   activeFilterOptionText: {
     fontWeight: "600",
-    color: "#9370DB",
+    color: "#2a325b",
   },
 });
 

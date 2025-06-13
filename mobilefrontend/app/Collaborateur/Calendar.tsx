@@ -132,12 +132,25 @@ const CalendarPage = () => {
           Authorization: `Bearer ${token}`,
         },
       })
+      
+      // FIX: Handle 404 (no leaves found) gracefully by returning an empty array.
+      // This prevents the hook from going into an error state.
+      if (leaveResponse.status === 404) {
+        return [];
+      }
 
+      // For any other non-successful response, throw an error.
       if (!leaveResponse.ok) {
-        throw new Error("Failed to fetch leave requests")
+        throw new Error(`Failed to fetch leave requests. Status: ${leaveResponse.status}`);
       }
 
       const conges = await leaveResponse.json()
+
+      // Add a defensive check to ensure the response is an array before mapping.
+      if (!Array.isArray(conges)) {
+        console.warn("API response for leaves was not an array. Returning empty list.", conges);
+        return [];
+      }
 
       return conges.map((conge: any) => ({
         id: conge.id || conge._id,
