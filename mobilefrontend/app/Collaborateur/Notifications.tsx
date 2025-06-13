@@ -1,3 +1,27 @@
+/*import { useEffect, useState } from "react"
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  SafeAreaView,
+  TouchableOpacity,
+  ActivityIndicator,
+  useColorScheme,
+  Dimensions,
+  Alert,
+  Modal,
+} from "react-native"
+import { useNavigation } from "@react-navigation/native"
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { ArrowLeft, Bell, Check, Clock, FileText, Moon, Sun, X } from "lucide-react-native"
+import Footer from "../Components/Footer"
+import useNotifications from "./useNotifications"
+import { format } from "date-fns"*/
+
+"use client"
+
 import { useEffect, useState } from "react"
 import {
   View,
@@ -22,11 +46,14 @@ import { format } from "date-fns"
 
 // Define the notification type
 type Notification = {
-  id: number
+  id: string
   message: string
   timestamp: string
   viewed: boolean
-  // Add any other relevant fields here
+  role?: string
+  serviceId?: string
+  personnelId?: string
+  codeSoc?: string
 }
 
 // Define the navigation stack types
@@ -53,7 +80,7 @@ const NotificationsPage = () => {
   const [modalVisible, setModalVisible] = useState(false)
 
   // Use the custom hook for notifications
-  const { notifications, unviewedCount, loading, error, fetchNotifications, markAllAsRead } =
+  const { notifications, unviewedCount, loading, error, fetchNotifications, markAsRead, markAllAsRead } =
     useNotifications()
 
   // Load theme preference on component mount
@@ -86,7 +113,7 @@ const NotificationsPage = () => {
   }
 
   // Delete notification
-  const deleteNotification = (id: number) => {
+  const deleteNotification = (id: string) => {
     Alert.alert("Supprimer la notification", "Êtes-vous sûr de vouloir supprimer cette notification ?", [
       {
         text: "Annuler",
@@ -123,15 +150,38 @@ const NotificationsPage = () => {
   }
 
   // Open notification details modal
-  const openNotificationDetails = (notification: Notification) => {
+  const openNotificationDetails = async (notification: Notification) => {
     setSelectedNotification(notification)
     setModalVisible(true)
+
+    // Mark as read when opened
+    if (!notification.viewed) {
+      const success = await markAsRead(notification.id)
+      if (success) {
+        console.log("Notification marked as read:", notification.id)
+      }
+    }
   }
 
   // Close notification details modal
   const closeNotificationDetails = () => {
     setModalVisible(false)
     setSelectedNotification(null)
+  }
+
+  // Handle mark all as read
+  const handleMarkAllAsRead = async () => {
+    if (unviewedCount === 0) {
+      Alert.alert("Information", "Toutes les notifications sont déjà lues.")
+      return
+    }
+
+    const success = await markAllAsRead()
+    if (success) {
+      Alert.alert("Succès", "Toutes les notifications ont été marquées comme lues.")
+    } else {
+      Alert.alert("Erreur", "Une erreur est survenue lors du marquage des notifications.")
+    }
   }
 
   // Apply theme styles
@@ -230,14 +280,7 @@ const NotificationsPage = () => {
             </View>
           ) : (
             <>
-              {/* Notifications Header */}
-              <View style={[styles.notificationsHeader, themeStyles.notificationsHeader]}>
-                <View style={styles.notificationsHeaderLeft}>
-                  <Text style={[styles.notificationsTitle, themeStyles.text]}>
-                    Notifications {unviewedCount > 0 && `(${unviewedCount})`}
-                  </Text>
-                </View>
-              </View>
+              
 
               {/* Notifications List */}
               <ScrollView
@@ -255,54 +298,50 @@ const NotificationsPage = () => {
                   </View>
                 ) : (
                   [...notifications]
-                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                  .map((notification) => (                    <TouchableOpacity
-                      key={notification.id}
-                      style={[
-                        styles.notificationCard,
-                        themeStyles.card,
-                        !notification.viewed && styles.unreadNotification,
-                        !notification.viewed && themeStyles.unreadNotification,
-                      ]}
-                      onPress={() => openNotificationDetails(notification)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.notificationContent}>
-                        <View
-                          style={[
-                            styles.notificationIconContainer,
-                            { backgroundColor: `${getStatusColor(notification.message)}15` },
-                          ]}
-                        >
-                          {getStatusIcon(notification.message)}
-                        </View>
-                        <View style={styles.notificationTextContainer}>
-                          <Text style={[styles.notificationTitle, themeStyles.text]}>
-                            {getNotificationTitle(notification.message)}
-                            {!notification.viewed && (
-                              <View style={styles.unreadDot}>
-                                <Text> </Text>
-                              </View>
-                            )}
-                          </Text>
-                          <Text style={[styles.notificationDescription, themeStyles.subtleText]}>
-                            {notification.message}
-                          </Text>
-                          <View style={styles.notificationMeta}>
-                            <Text style={[styles.notificationDate, themeStyles.subtleText]}>
-                              {formatTimestamp(notification.timestamp)}
-                            </Text>
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                    .map((notification) => (
+                      <TouchableOpacity
+                        key={notification.id}
+                        style={[
+                          styles.notificationCard,
+                          themeStyles.card,
+                          !notification.viewed && styles.unreadNotification,
+                          !notification.viewed && themeStyles.unreadNotification,
+                        ]}
+                        onPress={() => openNotificationDetails(notification)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.notificationContent}>
+                          <View
+                            style={[
+                              styles.notificationIconContainer,
+                              { backgroundColor: `${getStatusColor(notification.message)}15` },
+                            ]}
+                          >
+                            {getStatusIcon(notification.message)}
                           </View>
+                          <View style={styles.notificationTextContainer}>
+                            <Text style={[styles.notificationTitle, themeStyles.text]}>
+                              {getNotificationTitle(notification.message)}
+                              {!notification.viewed && (
+                                <View style={styles.unreadDot}>
+                                  <Text> </Text>
+                                </View>
+                              )}
+                            </Text>
+                            <Text style={[styles.notificationDescription, themeStyles.subtleText]}>
+                              {notification.message}
+                            </Text>
+                            <View style={styles.notificationMeta}>
+                              <Text style={[styles.notificationDate, themeStyles.subtleText]}>
+                                {formatTimestamp(notification.timestamp)}
+                              </Text>
+                            </View>
+                          </View>
+                          
                         </View>
-                        <TouchableOpacity
-                          style={styles.deleteButton}
-                          onPress={() => deleteNotification(notification.id)}
-                        >
-                          <X size={18} color={isDarkMode ? "#AAAAAA" : "#757575"} />
-                        </TouchableOpacity>
-                      </View>
-                    </TouchableOpacity>
-                  ))
+                      </TouchableOpacity>
+                    ))
                 )}
               </ScrollView>
             </>
@@ -311,12 +350,7 @@ const NotificationsPage = () => {
       )}
 
       {/* Notification Details Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={closeNotificationDetails}
-      >
+      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={closeNotificationDetails}>
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, themeStyles.card]}>
             {selectedNotification && (
@@ -339,9 +373,7 @@ const NotificationsPage = () => {
                 </View>
 
                 <View style={styles.modalBody}>
-                  <Text style={[styles.modalMessage, themeStyles.text]}>
-                    {selectedNotification.message}
-                  </Text>
+                  <Text style={[styles.modalMessage, themeStyles.text]}>{selectedNotification.message}</Text>
 
                   <View style={styles.modalDetails}>
                     <View style={styles.detailRow}>

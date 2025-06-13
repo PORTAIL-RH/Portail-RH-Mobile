@@ -133,12 +133,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.1)",
-    height: 60,
+    height: 79,
   },
   navItem: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 4,
+    paddingVertical: 12,
     width: width / 5,
   },
   navLabel: {
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   },
   floatingButton: {
     position: "absolute",
-    bottom: 25,
+    bottom: 33,
     left: width / 2 - 28, // Center the button (half of 56px width)
     zIndex: 10,
   },
